@@ -1,0 +1,23 @@
+{
+  "name": "server",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "dev": "cross-env GOOGLE_APPLICATION_CREDENTIALS=./credentials.json nodemon index.js",
+    "start": "node index.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  },
+  "dependencies": {
+    "cross-env": "^7.0.3",
+    "firebase": "^10.4.0",
+    "firebase-admin": "^11.10.1",
+    "node-telegram-bot-api": "^0.63.0"
+  }
+}
