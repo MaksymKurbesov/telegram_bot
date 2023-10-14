@@ -1,3 +1,5 @@
+import { bot } from "./index.js";
+
 const MAX_MESSAGES = 5;
 const MILLISECONDS_FLOOD = 60000;
 let floodStatus = false;
@@ -9,7 +11,7 @@ setInterval(() => {
   messageCount = 0;
 }, 5000);
 
-export const checkAntiFloodStatus = async (bot, chatId) => {
+export const checkAntiFloodStatus = async (chatId) => {
   if (messageCount >= MAX_MESSAGES) {
     floodStatus = true;
   }

@@ -21,19 +21,52 @@ const captchaOptions = {
   },
 };
 
-const cabinetOptions = {
-  reply_markup: {
-    inline_keyboard: [
-      [{ text: "Получить Email 📩", callback_data: "get_email" }],
-      [
-        {
-          text: "Посмотреть список полученных Email 📋",
-          callback_data: "get_all_emails",
-        },
+const sendMailToUserOptions = (emails) => {
+  const inlineKeyboard = emails.map((email) => {
+    return [
+      {
+        text: email,
+        callback_data: JSON.stringify({
+          action: "email_selected",
+          email: email,
+        }),
+      },
+    ];
+  });
+
+  return {
+    reply_markup: {
+      inline_keyboard: [
+        ...inlineKeyboard,
+        [
+          {
+            text: "Отмена",
+            callback_data: "emailRequestCanceled",
+          },
+        ],
       ],
-    ],
-  },
-  parse_mode: "HTML",
+    },
+  };
+};
+
+const getPaypalOptions = () => {
+  return {
+    reply_markup: {
+      inline_keyboard: [
+        [
+          { text: "20€ - 50€", callback_data: "paypal_20-50" },
+          { text: "50€ - 200€", callback_data: "paypal_50-200" },
+          { text: "200€ - 500€", callback_data: "paypal_200-500" },
+        ],
+        [
+          {
+            text: `Назад`,
+            callback_data: "cabinet",
+          },
+        ],
+      ],
+    },
+  };
 };
 
 const sendBillOptions = {
@@ -74,9 +107,10 @@ const checkBillOptions = {
 
 export {
   captchaOptions,
-  cabinetOptions,
   sendBillOptions,
   emailOptions,
   checkBillOptions,
   STATUS_EMOJI,
+  getPaypalOptions,
+  sendMailToUserOptions,
 };
