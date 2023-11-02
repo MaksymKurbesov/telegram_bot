@@ -1,22 +1,22 @@
 import { bot } from "../index.js";
 
-const userPaypalsCaption = (userPaypals) => {
+const requestProfitCaption = (userPaypals) => {
   const userPaypalsStr = userPaypals
     .map((userPaypal) => {
-      return `${userPaypal.email} | На сумму: ${userPaypal.limit}`;
+      return `<b>${userPaypal.type}</b> | ${userPaypal.email} | На сумму: ${userPaypal.limit}`;
     })
     .join("\n");
 
-  return `<b>PayPal #UKR: </b>\n\n${userPaypalsStr}`;
+  return `<b>🅿️ Ваши PayPal:</b>\n\n${userPaypalsStr}`;
 };
 
-const userPaypalsOptions = (userPaypals) => {
+const requestProfitOptions = (userPaypals) => {
   const userPaypalsButtons = userPaypals.map((userPaypal) => {
     return [
       {
         text: `${userPaypal.email}`,
         callback_data: JSON.stringify({
-          action: "request_profit",
+          action: "rp",
           userPaypal: userPaypal.email,
         }),
       },
@@ -36,13 +36,13 @@ const userPaypalsOptions = (userPaypals) => {
   };
 };
 
-const getUserPaypalsPage = async (chatID, messageID, userPaypals) => {
-  await bot.editMessageCaption(userPaypalsCaption(userPaypals), {
+const requestProfit = async (chatID, messageID, userPaypals) => {
+  await bot.editMessageCaption(requestProfitCaption(userPaypals), {
     chat_id: chatID,
     message_id: messageID,
     parse_mode: "HTML",
-    reply_markup: userPaypalsOptions(userPaypals),
+    reply_markup: requestProfitOptions(userPaypals),
   });
 };
 
-export { getUserPaypalsPage };
+export { requestProfit };

@@ -1,48 +1,50 @@
 import TelegramBot from "node-telegram-bot-api";
-import { getPaypalOptions } from "./options.js";
 import { checkAntiFloodStatus } from "./floodSystem.js";
-import {
-  addEmailsToDataBase,
-  addUserFields,
-  generateUniqueID,
-  isJSONField,
-  sendPaypalRequest,
-} from "./helpers.js";
+import { addEmailsToDataBase, addUserFields, isJSONField } from "./helpers.js";
 
 import { sendCaptchaMessage } from "./handlers/messageHandlers.js";
-import { NOTIFICATION_CHAT_ID, PAYPALS_PROFITS_CHAT_ID } from "./consts.js";
 import { db } from "./db.js";
 import { getCabinetPage, getFullCabinetPage } from "./pages/cabinet.js";
 import { getProfilePage } from "./pages/profile.js";
-import { getUserPaypalsPage } from "./pages/userPaypals.js";
+import { requestProfit } from "./pages/requestProfit.js";
 import { FieldValue } from "firebase-admin/firestore";
-import { requestProfit } from "./pages/profitForm.js";
+import {
+  continueRequestProfit,
+  profitFormStep1,
+  profitFormStep2,
+  profitFormStep3,
+  requestProfitAmount,
+  requestProfitBill,
+} from "./pages/profitForm.js";
+import { setProfitStatus } from "./pages/profitStatus.js";
+import { userProfitsCaption } from "./pages/userProfits.js";
+import {
+  changePaymentDetails,
+  getPaymentDetails,
+  updatePaymentDetails,
+} from "./pages/paymentDetails.js";
+import {
+  requestPaypal,
+  requestTypePaypal,
+  sendPaypalRequest,
+} from "./pages/paypalController.js";
 
 process.env["NTBA_FIX_350"] = 1;
 
 const token = "6359435376:AAGad0jCO4joL9LE94215AfKGMlpktwmm4Q";
-const RANDOM_PHOTO =
-  "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e9/Imgur_logo.svg/1024px-Imgur_logo.svg.png";
 
-export const bot = new TelegramBot(token, { polling: true });
+export const bot = new TelegramBot(process.env.TOKEN_BOT, { polling: true });
 
 export const usersCache = {};
-export const userProfitFormStates = [];
-export const EMAILS = [];
+export const userProfitFormStates = {};
+export const userChangeWalletState = {};
+export const userPaypalState = {};
 
 const start = async () => {
   await bot.setMyCommands([
     {
-      command: "/start",
-      description: "Начать работу с ботом",
-    },
-    {
       command: "/profile",
       description: "Личный кабинет",
-    },
-    {
-      command: "/info",
-      description: "Дополнительная информация",
     },
   ]);
 
@@ -66,119 +68,40 @@ const start = async () => {
       return await sendCaptchaMessage(msg);
     }
 
+    if (userChangeWalletState[chatId]) {
+      await updatePaymentDetails(text, chatId, msg.message_id, chat.username);
+    }
+
     if (photo && userProfitFormStates[chatId]?.step === 1) {
-      userProfitFormStates[chatId].data.billPhoto =
-        photo[photo.length - 1].file_id;
-      userProfitFormStates[chatId].step++;
-
-      await bot.deleteMessage(chatId, msg.message_id);
-
-      return await bot.editMessageText(
-        `Оформление профита на PayPal #UKR:\n\n${
-          userProfitFormStates[chat.id].data.paypal
-        }\n\nВведите ровную сумму профита в €!`,
-        {
-          chat_id: chat.id,
-          message_id: userProfitFormStates[chat.id].data.message_id,
-          parse_mode: "HTML",
-          reply_markup: {
-            inline_keyboard: [[{ text: "Отмена", callback_data: "cabinet" }]],
-          },
-        }
-      );
+      return await profitFormStep1(photo, chatId, msg);
     }
 
     if (userProfitFormStates[chatId]?.step === 2) {
-      userProfitFormStates[chatId].data.profitAmount = text;
-      userProfitFormStates[chatId].step++;
-
-      await bot.deleteMessage(chatId, msg.message_id);
-
-      return await bot.editMessageText(
-        `Оформление профита на PayPal #UKR:\n\n${
-          userProfitFormStates[chat.id].data.paypal
-        }\n\nВведите имя отправителя или вашу товарку!`,
-        {
-          chat_id: chatId,
-          message_id: userProfitFormStates[chatId].data.message_id,
-          parse_mode: "HTML",
-          reply_markup: {
-            inline_keyboard: [[{ text: "Отмена", callback_data: "cabinet" }]],
-          },
-        }
-      );
+      return await profitFormStep2(chatId, msg, text);
     }
 
     if (userProfitFormStates[chatId]?.step === 3) {
-      const userForm = userProfitFormStates[chatId];
-      const photo = userForm.data.billPhoto
-        ? userForm.data.billPhoto
-        : RANDOM_PHOTO;
-
-      userForm.data.name = text;
-      userForm.step++;
-
-      await bot.deleteMessage(chatId, msg.message_id);
-
-      await bot.sendPhoto(PAYPALS_PROFITS_CHAT_ID, photo, {
-        caption: `REQUEST PROFIT!\nПрофит ID: #${userForm.data.id}\nСумма: ${userForm.data.profitAmount}€\nИмя: ${userForm.data.name}\n\nprofit_message_id: ${userForm.data.message_id}\nuser_chat_id: ${userForm.data.chat_id}`,
-        reply_markup: {
-          inline_keyboard: [
-            [{ text: "НА ПАЛКЕ!", callback_data: "money_on_paypal" }],
-            [{ text: "ИНСТАНТ!", callback_data: "instant" }],
-            [
-              { text: "12ч", callback_data: "12_hours" },
-              { text: "24ч", callback_data: "24_hours" },
-            ],
-            [
-              { text: "ФРОД!", callback_data: "fraud" },
-              { text: "ВЕРИФ!", callback_data: "verification" },
-            ],
-            [
-              { text: "ЛОК!", callback_data: "lock" },
-              { text: "ДИСПУТ!", callback_data: "dispute" },
-            ],
-            [
-              {
-                text: "ПЕРЕОФОРМИТЬ!",
-                callback_data: "reissue",
-              },
-            ],
-
-            [{ text: "ВЫПЛАЧЕНО!", callback_data: "paid" }],
-          ],
-        },
-      });
-
-      delete userForm[chatId];
-
-      const localDate = new Date().toLocaleDateString("ru-RU");
-      const localTime = new Date().toLocaleTimeString("ru-RU");
-
-      return await bot.editMessageText(
-        `💸 <b>Профит PayPal #UKR</b>\n\n🗂<b>Айди профита:</b> #${userForm.data.id}\n\n${userForm.data.paypal}\n<b>Сумма:</b> ${userForm.data.profitAmount}€\n<b>Имя:</b> ${userForm.data.name}\n\n<b>Дата:</b> ${localTime} ${localDate}\n\nТекущий статус: ФРЕНД, F/F! 💳\n\n🔗 Ссылка на профит из канала (https://t.me/c/1814582633/4959)  `,
-        {
-          chat_id: chatId,
-          message_id: userProfitFormStates[chatId].data.message_id,
-          parse_mode: "HTML",
-          reply_markup: {
-            inline_keyboard: [
-              [{ text: "Ожидание 🕐", callback_data: "profit_status" }],
-            ],
-          },
-        }
-      );
+      return await profitFormStep3(chatId, msg, text);
     }
 
     if (text === "/profile") {
-      return getFullCabinetPage(chat.id, chat.username, bot);
+      return getFullCabinetPage(chatId, chat.username);
     }
   });
 
   bot.on("callback_query", async (msg) => {
     const { data, message } = msg;
     const { chat, message_id } = message;
+
+    const userNickname = usersCache[chat.username]?.nickname;
+
+    let userNicknameFromCaption;
     let parsedData;
+
+    const regexNickname = /user:\s*([\w\s]+)/;
+    const match = message.caption?.match(regexNickname);
+
+    if (match && match[1]) userNicknameFromCaption = match[1].trim();
 
     if (isJSONField(msg, "data")) {
       parsedData = JSON.parse(data);
@@ -193,156 +116,206 @@ const start = async () => {
     }
 
     if (data === "request_paypal") {
-      await bot.editMessageReplyMarkup(getPaypalOptions().reply_markup, {
-        chat_id: chat.id,
-        message_id,
+      await requestPaypal(chat.id, message_id);
+    }
+
+    if (data === "request_ukr") {
+      await requestTypePaypal(chat.id, message_id, "UKR");
+    }
+
+    if (data === "request_eu_ff") {
+      await requestTypePaypal(chat.id, message_id, "F/F");
+    }
+
+    const isPaypalAmount =
+      data === "paypal_0-100" ||
+      data === "paypal_100+" ||
+      data === "paypal_40-100" ||
+      data === "paypal_100-250" ||
+      data === "paypal_250-400" ||
+      data === "paypal_400-500" ||
+      data === "paypal_500+";
+
+    if (isPaypalAmount) {
+      try {
+        userPaypalState[chat.id].amount = data;
+        await sendPaypalRequest(
+          chat.id,
+          message_id,
+          userPaypalState[chat.id],
+          chat.username
+        );
+      } catch (e) {
+        console.log(e);
+      }
+    }
+
+    if (data === "user_profits") {
+      try {
+        const userData = await db.collection("users").doc(chat.username).get();
+
+        return await bot.answerCallbackQuery(msg.id, {
+          text: userProfitsCaption(userData.data().profits),
+          show_alert: true, // Это делает уведомление всплывающим, как на вашем скриншоте
+          parse_mode: "HTML",
+        });
+      } catch (e) {
+        console.log(e, "error");
+      }
+
+      // await getUserProfitsPage(chat.id, message_id, userData.data().profits);
+    }
+
+    ////////////////////// STATUS //////////////////////
+
+    if (data === "money_on_paypal") {
+      await setProfitStatus("НА ПАЛКЕ!", message, userNicknameFromCaption);
+    }
+
+    if (data === "instant") {
+      await setProfitStatus("ИНСТАНТ!", message, userNicknameFromCaption);
+    }
+
+    if (data === "stop") {
+      await setProfitStatus("СТОП!", message, userNicknameFromCaption);
+
+      const regexPaypal = /Paypal:\s(.*?)(\n|$)/;
+      const match = message.caption?.match(regexPaypal);
+
+      console.log(match[1], "match");
+
+      await db.collection("emails").doc(match[1]).update({
+        status: "Стоп",
       });
     }
 
-    if (data === "paypal_20-50") {
-      const userNickname = usersCache[chat.username]?.nickname;
-      await sendPaypalRequest(chat.id, message_id, data, userNickname);
+    if (data === "24_hours") {
+      await setProfitStatus("24 ЧАСА!", message, userNicknameFromCaption);
     }
 
-    if (data === "paypal_50-200") {
-      const userNickname = usersCache[chat.username]?.nickname;
-      await sendPaypalRequest(chat.id, message_id, data, userNickname);
+    if (data === "fraud") {
+      await setProfitStatus("ФРОД!", message, userNicknameFromCaption);
     }
 
-    if (data === "paypal_200-500") {
-      const userNickname = usersCache[chat.username]?.nickname;
-      await sendPaypalRequest(chat.id, message_id, data, userNickname);
+    if (data === "verification") {
+      await setProfitStatus("ВЕРИФ!", message, userNicknameFromCaption);
     }
 
-    if (data === "user_paypals") {
-      const userNickname = usersCache[chat.username]?.nickname;
-      const userData = await db.collection("users").doc(userNickname).get();
-
-      await getUserPaypalsPage(chat.id, message_id, userData.data().paypals);
+    if (data === "lock") {
+      await setProfitStatus("ЛОК!", message, userNicknameFromCaption);
     }
 
-    if (data === "money_on_paypal") {
-      const regexMsgId = /profit_message_id:\s*(\d+)/;
-      const regexChatId = /user_chat_id:\s*(\d+)/;
-
-      const messageId = message.caption.match(regexMsgId);
-      const chatId = message.caption.match(regexChatId);
-
-      await bot.editMessageReplyMarkup(
-        {
-          inline_keyboard: [
-            [
-              {
-                text: `НА ПАЛКЕ!`,
-                callback_data: "profit_status",
-              },
-            ],
-          ],
-        },
-        {
-          chat_id: chatId[1],
-          message_id: messageId[1],
-        }
-      );
+    if (data === "dispute") {
+      await setProfitStatus("ДИСПУТ!", message, userNicknameFromCaption);
     }
 
-    if (parsedData?.action === "request_profit") {
-      await requestProfit(chat.id, parsedData);
-      // const sendMessage = await bot.sendMessage(
-      //   chat.id,
-      //   `Оформление профита на PayPal #UKR:\n\n${parsedData.userPaypal}`,
-      //   {
-      //     parse_mode: "HTML",
-      //     reply_markup: {
-      //       inline_keyboard: [
-      //         [{ text: "Продолжить", callback_data: "request_profit_bill" }],
-      //         [{ text: "Отмена", callback_data: "cabinet" }],
-      //       ],
-      //     },
-      //   }
-      // );
-      // userProfitFormStates[chat.id] = {
-      //   step: 1,
-      //   data: {
-      //     id: generateUniqueID(),
-      //     paypal: parsedData.userPaypal,
-      //     message_id: sendMessage.message_id,
-      //     chat_id: chat.id,
-      //   },
-      // };
+    if (data === "paid") {
+      await setProfitStatus("ВЫПЛАЧЕНО!", message, userNicknameFromCaption);
+    }
+
+    if (data === "delete_message") {
+      await bot.deleteMessage(chat.id, message_id);
+    }
+
+    ////////////////////// STATUS //////////////////////
+
+    if (data === "request_profit") {
+      const userData = await db.collection("users").doc(chat.username).get();
+
+      await requestProfit(chat.id, message_id, userData.data().paypals);
+    }
+
+    if (parsedData?.action === "rp") {
+      try {
+        const paypal = await db
+          .collection("emails")
+          .doc(parsedData.userPaypal)
+          .get();
+
+        await continueRequestProfit(chat.id, paypal, chat.username);
+      } catch (e) {
+        console.log(e, "error");
+      }
     }
 
     if (data === "request_profit_bill") {
-      await bot.editMessageText(
-        `Оформление профита на PayPal #UKR:\n\n${
-          userProfitFormStates[chat.id].data.paypal
-        }\n\nОтправьте фото перевода!`,
-        {
-          chat_id: chat.id,
-          message_id: userProfitFormStates[chat.id].data.message_id,
-          parse_mode: "HTML",
-          reply_markup: {
-            inline_keyboard: [
-              [{ text: "Без фото", callback_data: "request_profit_amount" }],
-              [{ text: "Отмена", callback_data: "cabinet" }],
-            ],
-          },
-        }
-      );
+      await requestProfitBill(chat.id);
     }
 
     if (data === "request_profit_amount") {
-      await bot.editMessageText(
-        `Оформление профита на PayPal #UKR:\n\n${
-          userProfitFormStates[chat.id].data.paypal
-        }\n\nВведите ровную сумму профита в €!`,
-        {
-          chat_id: chat.id,
-          message_id: userProfitFormStates[chat.id].data.message_id,
-          parse_mode: "HTML",
-          reply_markup: {
-            inline_keyboard: [[{ text: "Отмена", callback_data: "cabinet" }]],
-          },
-        }
-      );
+      await requestProfitAmount(chat.id);
+    }
 
-      userProfitFormStates[chat.id].step++;
+    if (data === "cancel_profit") {
+      await bot.deleteMessage(chat.id, message_id);
+      delete userProfitFormStates[chat.id];
+    }
+
+    if (data === "payment_details") {
+      await getPaymentDetails(chat.id, message_id, userNickname);
+    }
+
+    if (data === "change_payment_details") {
+      await changePaymentDetails(chat.id, message_id);
     }
 
     if (parsedData?.action === "email_selected") {
-      const userNickname = message.text.match(/User:\s*(\w+)/)[1];
-      const paypalLimit = message.text.match(/Sum:\s+(\d+-\d+€)/)[1];
-      const updatedText = `${msg.message.text}\n\nВыданная палка: ${parsedData.email}`;
+      try {
+        const userNickname = message.text.match(/User:\s*(\w+)/)[1];
+        const paypalLimit = message.text.match(/Sum:\s*([\d+\-]+€)/)[1];
+        const updatedText = `${msg.message.text}\n\nВыданная палка: ${parsedData.email}`;
+        const paypalType = message.text.match(/REQUEST\s+(.+)!/)[1];
 
-      await db
-        .collection("users")
-        .doc(userNickname)
-        .update({
-          paypals: FieldValue.arrayUnion({
-            email: parsedData.email,
-            limit: paypalLimit,
-          }),
+        await db
+          .collection("users")
+          .doc(userNickname)
+          .update({
+            paypals: FieldValue.arrayUnion({
+              email: parsedData.email,
+              limit: paypalLimit,
+              type: paypalType,
+            }),
+          });
+
+        if (paypalType !== "UKR") {
+          await db.collection("emails").doc(parsedData.email).update({
+            status: "Стоп",
+          });
+        }
+
+        await bot.editMessageText(updatedText, {
+          chat_id: chat.id,
+          message_id: message.message_id,
         });
-
-      await bot.editMessageText(updatedText, {
-        chat_id: chat.id,
-        message_id: message.message_id,
-      });
-      await bot.sendMessage(usersCache[userNickname].chatId, parsedData.email);
+        await bot.sendMessage(
+          usersCache[userNickname].chatId,
+          `🟢 Выдан PayPal: <b>${paypalType} | ${parsedData.email}</b>`,
+          {
+            parse_mode: "HTML",
+          }
+        );
+      } catch (e) {
+        console.log(e, "error");
+      }
     }
 
     if (data === "captcha_lion") {
-      const userData = await db.collection("users").doc(chat.username).get();
-      if (!userData.exists) {
-        await db
-          .collection("users")
-          .doc(msg.from.username)
-          .set(addUserFields(chat.id, chat.username));
-      } else {
-        usersCache[chat.username] = userData.data();
-      }
+      try {
+        const userData = await db.collection("users").doc(chat.username).get();
 
-      await getFullCabinetPage(chat.id, chat.username);
+        if (!userData.exists) {
+          await db
+            .collection("users")
+            .doc(msg.from.username)
+            .set(addUserFields(chat.id, chat.username));
+        }
+
+        usersCache[chat.username] = addUserFields(chat.id, chat.username);
+
+        await getFullCabinetPage(chat.id, chat.username);
+      } catch (e) {
+        console.log(e, "error");
+      }
     }
 
     await bot.answerCallbackQuery(msg.id);

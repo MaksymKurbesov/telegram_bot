@@ -10,13 +10,13 @@ const profileOptions = () => {
       [
         {
           text: `Профиты`,
-          callback_data: "profits",
+          callback_data: "user_profits",
         },
       ],
       [
         {
-          text: `Мои PayPal`,
-          callback_data: "user_paypals",
+          text: `Оформить профит`,
+          callback_data: "request_profit",
         },
         {
           text: `Мои IBAN`,
@@ -27,6 +27,10 @@ const profileOptions = () => {
         {
           text: `Реквизиты для выплат`,
           callback_data: "payment_details",
+        },
+        {
+          text: `NameTAG`,
+          callback_data: "nametag",
         },
       ],
       [

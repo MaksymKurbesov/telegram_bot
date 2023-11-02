@@ -5,7 +5,7 @@
   "main": "index.js",
   "type": "module",
   "scripts": {
-    "dev": "cross-env GOOGLE_APPLICATION_CREDENTIALS=./credentials.json nodemon index.js",
+    "dev": "cross-env TOKEN_BOT=6359435376:AAGad0jCO4joL9LE94215AfKGMlpktwmm4Q GOOGLE_APPLICATION_CREDENTIALS=./credentials.json nodemon index.js",
     "start": "node index.js"
   },
   "keywords": [],

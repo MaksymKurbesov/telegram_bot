@@ -3,19 +3,25 @@ import { db } from "../db.js";
 import { bot } from "../index.js";
 
 const cabinetCaption = (userData) => {
-  const {
-    nickname,
-    profitsCount,
-    totalProfits,
-    personalTopProfit,
-    teamTopProfit,
-  } = userData;
+  const { nickname, profits, teamTopProfit } = userData;
+
+  const totalProfitsAmount = profits
+    .filter((profit) => profit.status === "ВЫПЛАЧЕНО!")
+    .reduce((sum, profit) => sum + profit.amount, 0);
+
+  const personalTopProfit = profits
+    .filter((profit) => profit.status === "ВЫПЛАЧЕНО!")
+    .reduce((max, profit) => {
+      return max === null || profit.amount > max.amount ? profit : max;
+    }, null);
 
   return `
-Кабинет: <b>${nickname}</b>\n
-Количество профитов: <b>${profitsCount} шт</b>.
-💶 Общая сумма профитов: <b>${totalProfits}€</b>
-💶 Личный топ профит: <b>${personalTopProfit}€</b>
+Кабинет: <b>${nickname}</b>\n 
+Количество профитов: <b>${profits.length} шт</b>.
+💶 Общая сумма профитов: <b>${totalProfitsAmount}€</b>
+💶 Личный топ профит: <b>${
+    personalTopProfit ? personalTopProfit.amount : 0
+  }€</b>
 💶 Топ профит тимы: <b>${teamTopProfit}€</b>
     `;
 };
