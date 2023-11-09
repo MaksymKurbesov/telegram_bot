@@ -84,6 +84,7 @@ const addUserFields = (chatId, nickname) => {
   return {
     chatId,
     nickname,
+    isAdmin: false,
     nametag: `#${generateNametag(chatId)}`,
     teamTopProfit: 0,
     profits: [],

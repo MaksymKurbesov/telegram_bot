@@ -41,6 +41,7 @@ export const userPaypalState = {};
 export const userChangeNametagState = {};
 const userPagination = {};
 export let profitMessages = [];
+const usersPaypalTimeout = {};
 
 const start = async () => {
   cron.schedule("0 0 * * *", () => {
@@ -118,11 +119,6 @@ const start = async () => {
     const { data, message } = msg;
     const { chat, message_id } = message;
 
-    if (!usersCache[chat.username] && data !== "captcha_lion") {
-      await sendCaptchaMessage(message);
-      return await bot.answerCallbackQuery(msg.id);
-    }
-
     const userNickname = usersCache[chat.username]?.nickname;
 
     let userNicknameFromCaption;
@@ -132,6 +128,15 @@ const start = async () => {
     const match = message.caption?.match(regexNickname);
 
     if (match && match[1]) userNicknameFromCaption = match[1].trim();
+
+    if (
+      !usersCache[chat.username] &&
+      message.from?.id === 6359435376 &&
+      data !== "captcha_lion" &&
+      data !== "email_selected"
+    ) {
+      return await sendCaptchaMessage(message);
+    }
 
     if (isJSONField(msg, "data")) {
       parsedData = JSON.parse(data);
@@ -206,7 +211,28 @@ const start = async () => {
     }
 
     if (data === "request_paypal") {
-      await requestPaypal(chat.id, message_id);
+      if (!usersPaypalTimeout[chat.id]) {
+        await requestPaypal(chat.id, message_id);
+      } else {
+        await bot.editMessageCaption(
+          `<b>Подождите 1 минуту для создания новой заявки!</b>`,
+          {
+            chat_id: chat.id,
+            message_id: message_id,
+            parse_mode: "HTML",
+            reply_markup: {
+              inline_keyboard: [
+                [
+                  {
+                    text: `Назад`,
+                    callback_data: "cabinet",
+                  },
+                ],
+              ],
+            },
+          }
+        );
+      }
     }
 
     if (data === "request_ukr") {
@@ -235,6 +261,10 @@ const start = async () => {
           userPaypalState[chat.id],
           chat.username
         );
+        usersPaypalTimeout[chat.id] = true;
+        setTimeout(() => {
+          usersPaypalTimeout[chat.id] = false;
+        }, 60000);
       } catch (e) {
         console.log(e);
       }
@@ -333,8 +363,6 @@ const start = async () => {
 
       const regexPaypal = /Paypal:\s(.*?)(\n|$)/;
       const match = message.caption?.match(regexPaypal);
-
-      console.log(match[1], "match");
 
       await db.collection("emails").doc(match[1]).update({
         status: "Стоп",
@@ -448,6 +476,10 @@ const start = async () => {
           chat_id: chat.id,
           message_id: message.message_id,
         });
+
+        console.log(userNickname, "userNickname");
+        console.log(usersCache, "usersCache");
+
         await bot.sendMessage(
           usersCache[userNickname].chatId,
           `🟢 Выдан PayPal: <b>${paypalType} | ${parsedData.email}</b>`,
