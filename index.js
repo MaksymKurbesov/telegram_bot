@@ -118,6 +118,10 @@ const start = async () => {
     const { data, message } = msg;
     const { chat, message_id } = message;
 
+    if (!usersCache[chat.username]) {
+      return await sendCaptchaMessage(msg);
+    }
+
     const userNickname = usersCache[chat.username]?.nickname;
 
     let userNicknameFromCaption;
