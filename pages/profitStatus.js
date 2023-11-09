@@ -60,17 +60,17 @@ export const setProfitStatus = async (status, message, nickname) => {
       parse_mode: "HTML",
     });
 
-    await bot.editMessageReplyMarkup(
-      {
-        inline_keyboard: [
-          [{ text: `${status}`, callback_data: "profit_status" }],
-        ],
-      },
-      {
-        chat_id: PAYMENTS_CHAT_ID,
-        message_id: paymentMessageId[1],
-      }
-    );
+    // await bot.editMessageReplyMarkup(
+    //   {
+    //     inline_keyboard: [
+    //       [{ text: `${status}`, callback_data: "profit_status" }],
+    //     ],
+    //   },
+    //   {
+    //     chat_id: PAYMENTS_CHAT_ID,
+    //     message_id: paymentMessageId[1],
+    //   }
+    // );
 
     await bot.editMessageReplyMarkup(
       {

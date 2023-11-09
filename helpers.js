@@ -85,7 +85,7 @@ const addUserFields = (chatId, nickname) => {
     chatId,
     nickname,
     isAdmin: false,
-    nametag: `#${generateNametag(chatId)}`,
+    nametag: `#${generateNametag(String(chatId))}`,
     teamTopProfit: 0,
     profits: [],
     paypals: [],
@@ -97,12 +97,42 @@ const addUserFields = (chatId, nickname) => {
   };
 };
 
-const generateNametag = (...numbers) => {
-  let id = "";
-  numbers.forEach((number) => {
-    id += number.toString(16); // Преобразуем число в шестнадцатеричный формат
-  });
-  return id;
+const extractValue = (str, pattern) => {
+  let parts = str.split(pattern);
+  if (parts.length > 1) {
+    return parts[1].split("\n")[0].trim(); // trim() уберет пробельные символы в начале и конце строки
+  }
+  return null; // или любое другое значение для обозначения, что ничего не найдено
 };
 
-export { addUserFields, isJSONField, generateUniqueID, sendCurrentPage };
+const generateNametag = (numberSet) => {
+  // Создаем хеш на основе входного набора чисел
+  let hash = 0;
+  for (let i = 0; i < numberSet.length; i++) {
+    let char = numberSet.charCodeAt(i);
+    hash = (hash << 5) - hash + char;
+    hash = hash & hash; // Преобразовываем в 32битное целое число
+  }
+
+  // Преобразуем хеш в строку в шестнадцатеричном формате
+  hash = Math.abs(hash).toString(16).toUpperCase();
+
+  // Обрезаем или дополняем строку до 7 символов
+  if (hash.length > 7) {
+    hash = hash.substring(0, 7);
+  } else {
+    while (hash.length < 7) {
+      hash += "0";
+    }
+  }
+
+  return hash;
+};
+
+export {
+  addUserFields,
+  isJSONField,
+  generateUniqueID,
+  sendCurrentPage,
+  extractValue,
+};

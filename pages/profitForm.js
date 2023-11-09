@@ -187,20 +187,20 @@ export const profitFormStep3 = async (chatId, msg, text) => {
 
     await bot.deleteMessage(chatId, msg.message_id);
 
-    const sentMessage = await bot.sendMessage(
-      PAYMENTS_CHAT_ID,
-      `<b>Paypal:</b> ${formData.type}\n<b>Пользователь:</b> ${formData.nametag}\n<b>Сумма:</b> ${formData.profitAmount}€`,
-      {
-        parse_mode: "HTML",
-        reply_markup: {
-          inline_keyboard: [[{ text: "Ожидание", callback_data: "status" }]],
-        },
-      }
-    );
+    // const sentMessage = await bot.sendMessage(
+    //   PAYMENTS_CHAT_ID,
+    //   `<b>Paypal:</b> ${formData.type}\n<b>Пользователь:</b> ${formData.nametag}\n<b>Сумма:</b> ${formData.profitAmount}€`,
+    //   {
+    //     parse_mode: "HTML",
+    //     reply_markup: {
+    //       inline_keyboard: [[{ text: "Ожидание", callback_data: "status" }]],
+    //     },
+    //   }
+    // );
 
-    formData.payment_message_id = sentMessage.message_id;
+    // formData.payment_message_id = sentMessage.message_id;
     const sendPhoto = await bot.sendPhoto(PAYPALS_PROFITS_CHAT_ID, photo, {
-      caption: `<b>REQUEST PROFIT!</b>\n\n<b>Профит ID:</b> #${formData.id}\n<b>Тип: ${formData.type}</b>\n<b>Paypal:</b> ${formData.paypal}\n<b>Сумма:</b> ${formData.profitAmount}€\n<b>Имя:</b> ${formData.name}\n\n🟢 Текущий статус профита: Ожидание\n\n---------------------\nprofit_message_id: ${formData.message_id}\npayment_message_id: ${formData.payment_message_id}\nuser_chat_id: ${formData.chat_id}\nuser: ${formData.nickname}`,
+      caption: `<b>REQUEST PROFIT!</b>\n\n<b>Профит ID:</b> #${formData.id}\n<b>Тип: ${formData.type}</b>\n<b>Paypal:</b> ${formData.paypal}\n<b>Сумма:</b> ${formData.profitAmount}€\n<b>Имя:</b> ${formData.name}\n\n🟢 Текущий статус профита: Ожидание\n\n---------------------\nprofit_message_id: ${formData.message_id}\nuser_chat_id: ${formData.chat_id}\nuser: ${formData.nickname}\nnametag: ${formData.nametag}`,
       parse_mode: "HTML",
       reply_markup: {
         inline_keyboard: profitStatusButtons(),
@@ -215,7 +215,7 @@ export const profitFormStep3 = async (chatId, msg, text) => {
 
     return bot
       .editMessageText(
-        `💸 <b>Профит PayPal ${formData.type}!</b>\n\n🗂<b>Айди профита:</b> #${formData.id}\n\n${formData.paypal}\n<b>Сумма:</b> ${formData.profitAmount}€\n<b>Имя:</b> ${formData.name}\n\n<b>Дата:</b> ${localTime} ${localDate}\n\n🔗 Ссылка на профит из канала (https://t.me/c/2017066381/${sentMessage.message_id})  `,
+        `💸 <b>Профит PayPal ${formData.type}!</b>\n\n🗂<b>Айди профита:</b> #${formData.id}\n\n${formData.paypal}\n<b>Сумма:</b> ${formData.profitAmount}€\n<b>Имя:</b> ${formData.name}\n\n<b>Дата:</b> ${localTime} ${localDate}`,
         {
           chat_id: chatId,
           message_id: userProfitFormStates[chatId].data.message_id,

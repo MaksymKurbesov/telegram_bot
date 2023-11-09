@@ -1,6 +1,11 @@
 import TelegramBot from "node-telegram-bot-api";
 import { checkAntiFloodStatus } from "./floodSystem.js";
-import { addUserFields, isJSONField, sendCurrentPage } from "./helpers.js";
+import {
+  addUserFields,
+  extractValue,
+  isJSONField,
+  sendCurrentPage,
+} from "./helpers.js";
 
 import { sendCaptchaMessage } from "./handlers/messageHandlers.js";
 import { db } from "./db.js";
@@ -29,6 +34,7 @@ import {
 } from "./pages/paypalController.js";
 import { addEmailsToDataBase, cardIn } from "./pages/adminFunctions.js";
 import cron from "node-cron";
+import { PAYMENTS_CHAT_ID } from "./consts.js";
 
 process.env["NTBA_FIX_350"] = 1;
 
@@ -121,13 +127,14 @@ const start = async () => {
 
     const userNickname = usersCache[chat.username]?.nickname;
 
-    let userNicknameFromCaption;
     let parsedData;
+    let username;
 
-    const regexNickname = /user:\s*([\w\s]+)/;
-    const match = message.caption?.match(regexNickname);
+    let parts = message.caption?.split("user: ");
 
-    if (match && match[1]) userNicknameFromCaption = match[1].trim();
+    if (parts?.length > 1) {
+      username = parts[1].split("\n")[0];
+    }
 
     if (
       !usersCache[chat.username] &&
@@ -351,15 +358,29 @@ const start = async () => {
     ////////////////////// STATUS //////////////////////
 
     if (data === "money_on_paypal") {
-      await setProfitStatus("НА ПАЛКЕ!", message, userNicknameFromCaption);
+      await setProfitStatus("НА ПАЛКЕ!", message, username);
+      const type = extractValue(message.caption, "Тип: ");
+      const amount = extractValue(message.caption, "Сумма: ");
+      const nametag = extractValue(message.caption, "nametag: ");
+
+      await bot.sendMessage(
+        PAYMENTS_CHAT_ID,
+        `<b>Paypal:</b> ${type}\n<b>Пользователь:</b> ${nametag}\n<b>Сумма:</b> ${amount}€`,
+        {
+          parse_mode: "HTML",
+          reply_markup: {
+            inline_keyboard: [[{ text: "Ожидание", callback_data: "status" }]],
+          },
+        }
+      );
     }
 
     if (data === "instant") {
-      await setProfitStatus("ИНСТАНТ!", message, userNicknameFromCaption);
+      await setProfitStatus("ИНСТАНТ!", message, username);
     }
 
     if (data === "stop") {
-      await setProfitStatus("СТОП!", message, userNicknameFromCaption);
+      await setProfitStatus("СТОП!", message, username);
 
       const regexPaypal = /Paypal:\s(.*?)(\n|$)/;
       const match = message.caption?.match(regexPaypal);
@@ -370,27 +391,27 @@ const start = async () => {
     }
 
     if (data === "24_hours") {
-      await setProfitStatus("24 ЧАСА!", message, userNicknameFromCaption);
+      await setProfitStatus("24 ЧАСА!", message, username);
     }
 
     if (data === "fraud") {
-      await setProfitStatus("ФРОД!", message, userNicknameFromCaption);
+      await setProfitStatus("ФРОД!", message, username);
     }
 
     if (data === "verification") {
-      await setProfitStatus("ВЕРИФ!", message, userNicknameFromCaption);
+      await setProfitStatus("ВЕРИФ!", message, username);
     }
 
     if (data === "lock") {
-      await setProfitStatus("ЛОК!", message, userNicknameFromCaption);
+      await setProfitStatus("ЛОК!", message, username);
     }
 
     if (data === "dispute") {
-      await setProfitStatus("ДИСПУТ!", message, userNicknameFromCaption);
+      await setProfitStatus("ДИСПУТ!", message, username);
     }
 
     if (data === "paid") {
-      await setProfitStatus("ВЫПЛАЧЕНО!", message, userNicknameFromCaption);
+      await setProfitStatus("ВЫПЛАЧЕНО!", message, username);
     }
 
     if (data === "delete_message") {
