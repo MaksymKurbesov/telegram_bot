@@ -118,8 +118,9 @@ const start = async () => {
     const { data, message } = msg;
     const { chat, message_id } = message;
 
-    if (!usersCache[chat.username]) {
-      return await sendCaptchaMessage(msg);
+    if (!usersCache[chat.username] && data !== "captcha_lion") {
+      await sendCaptchaMessage(message);
+      return await bot.answerCallbackQuery(msg.id);
     }
 
     const userNickname = usersCache[chat.username]?.nickname;
