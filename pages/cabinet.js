@@ -17,12 +17,11 @@ const cabinetCaption = (userData) => {
 
   return `
 Кабинет: <b>${nickname}</b>\n 
-Количество профитов: <b>${profits.length} шт</b>.
+🗂 Количество профитов: <b>${profits.length} шт</b>.
 💶 Общая сумма профитов: <b>${totalProfitsAmount}€</b>
 💶 Личный топ профит: <b>${
     personalTopProfit ? personalTopProfit.amount : 0
   }€</b>
-💶 Топ профит тимы: <b>${teamTopProfit}€</b>
     `;
 };
 
@@ -59,14 +58,14 @@ const cabinetOptions = (userData) => {
 };
 
 const getFullCabinetPage = async (chatID, userNickname) => {
-  const userRef = db.collection("users").doc(userNickname);
+  const userRef = await db.collection("users").doc(userNickname);
   const userDoc = await userRef.get();
 
   await bot.sendPhoto(chatID, MAIN_IMAGE, cabinetOptions(userDoc.data()));
 };
 
 const getCabinetPage = async (chatID, messageID, userNickname) => {
-  const userRef = db.collection("users").doc(userNickname);
+  const userRef = await db.collection("users").doc(userNickname);
   const userDoc = await userRef.get();
 
   await bot.editMessageCaption(cabinetCaption(userDoc.data()), {

@@ -29,7 +29,7 @@ const profileOptions = () => {
           callback_data: "payment_details",
         },
         {
-          text: `NameTAG`,
+          text: `NAMETAG`,
           callback_data: "nametag",
         },
       ],

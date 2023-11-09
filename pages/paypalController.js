@@ -59,7 +59,7 @@ const sendPaypalRequest = async (chatId, messageId, data, nickname) => {
   );
 
   const paypalAmount = data.amount.split("_")[1];
-  const availablePaypalsRef = db.collection("emails");
+  const availablePaypalsRef = await db.collection("emails");
   const availablePaypalsSnap = await availablePaypalsRef
     .where("type", "==", data.paypal)
     .where("status", "==", "Свободен")

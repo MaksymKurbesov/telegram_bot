@@ -1,4 +1,4 @@
-import { bot, userProfitFormStates } from "../index.js";
+import { bot, profitMessages, userProfitFormStates } from "../index.js";
 import { generateUniqueID } from "../helpers.js";
 import { PAYMENTS_CHAT_ID, PAYPALS_PROFITS_CHAT_ID } from "../consts.js";
 import { db } from "../db.js";
@@ -6,7 +6,12 @@ import { FieldValue } from "firebase-admin/firestore";
 
 const NO_PHOTO_PLACEHOLDER = "https://i.imgur.com/4URRyma.jpg";
 
-export const continueRequestProfit = async (chatId, paypal, nickname) => {
+export const continueRequestProfit = async (
+  chatId,
+  paypal,
+  nickname,
+  nametag
+) => {
   const userPaypal = paypal.data();
 
   try {
@@ -33,6 +38,7 @@ export const continueRequestProfit = async (chatId, paypal, nickname) => {
         message_id: sendMessage.message_id,
         chat_id: chatId,
         nickname: nickname,
+        nametag: nametag,
       },
     };
   } catch (e) {
@@ -183,7 +189,7 @@ export const profitFormStep3 = async (chatId, msg, text) => {
 
     const sentMessage = await bot.sendMessage(
       PAYMENTS_CHAT_ID,
-      `<b>Paypal:</b> ${formData.type}\n<b>Пользователь:</b> ${formData.nickname}\n<b>Сумма:</b> ${formData.profitAmount}€`,
+      `<b>Paypal:</b> ${formData.type}\n<b>Пользователь:</b> ${formData.nametag}\n<b>Сумма:</b> ${formData.profitAmount}€`,
       {
         parse_mode: "HTML",
         reply_markup: {
@@ -193,8 +199,7 @@ export const profitFormStep3 = async (chatId, msg, text) => {
     );
 
     formData.payment_message_id = sentMessage.message_id;
-
-    await bot.sendPhoto(PAYPALS_PROFITS_CHAT_ID, photo, {
+    const sendPhoto = await bot.sendPhoto(PAYPALS_PROFITS_CHAT_ID, photo, {
       caption: `<b>REQUEST PROFIT!</b>\n\n<b>Профит ID:</b> #${formData.id}\n<b>Тип: ${formData.type}</b>\n<b>Paypal:</b> ${formData.paypal}\n<b>Сумма:</b> ${formData.profitAmount}€\n<b>Имя:</b> ${formData.name}\n\n🟢 Текущий статус профита: Ожидание\n\n---------------------\nprofit_message_id: ${formData.message_id}\npayment_message_id: ${formData.payment_message_id}\nuser_chat_id: ${formData.chat_id}\nuser: ${formData.nickname}`,
       parse_mode: "HTML",
       reply_markup: {
@@ -202,9 +207,15 @@ export const profitFormStep3 = async (chatId, msg, text) => {
       },
     });
 
+    profitMessages.push({
+      id: formData.id,
+      amount: formData.profitAmount,
+      message_id: sendPhoto.message_id,
+    });
+
     return bot
       .editMessageText(
-        `💸 <b>Профит PayPal ${formData.type}!</b>\n\n🗂<b>Айди профита:</b> #${formData.id}\n\n${formData.paypal}\n<b>Сумма:</b> ${formData.profitAmount}€\n<b>Имя:</b> ${formData.name}\n\n<b>Дата:</b> ${localTime} ${localDate}\n\nТекущий статус: ФРЕНД, F/F! 💳\n\n🔗 Ссылка на профит из канала (https://t.me/c/2017066381/${sentMessage.message_id})  `,
+        `💸 <b>Профит PayPal ${formData.type}!</b>\n\n🗂<b>Айди профита:</b> #${formData.id}\n\n${formData.paypal}\n<b>Сумма:</b> ${formData.profitAmount}€\n<b>Имя:</b> ${formData.name}\n\n<b>Дата:</b> ${localTime} ${localDate}\n\n🔗 Ссылка на профит из канала (https://t.me/c/2017066381/${sentMessage.message_id})  `,
         {
           chat_id: chatId,
           message_id: userProfitFormStates[chatId].data.message_id,
@@ -216,8 +227,9 @@ export const profitFormStep3 = async (chatId, msg, text) => {
           },
         }
       )
-      .then(() => {
-        db.collection("users")
+      .then(async () => {
+        await db
+          .collection("users")
           .doc(formData.nickname)
           .update({
             profits: FieldValue.arrayUnion({
@@ -225,6 +237,7 @@ export const profitFormStep3 = async (chatId, msg, text) => {
               email: formData.paypal,
               amount: +formData.profitAmount,
               name: formData.name,
+              type: formData.type,
               date: `${localDate} ${localTime}`,
               status: "Ожидание",
             }),

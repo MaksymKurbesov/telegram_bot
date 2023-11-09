@@ -1,6 +1,6 @@
 import TelegramBot from "node-telegram-bot-api";
 import { checkAntiFloodStatus } from "./floodSystem.js";
-import { addEmailsToDataBase, addUserFields, isJSONField } from "./helpers.js";
+import { addUserFields, isJSONField, sendCurrentPage } from "./helpers.js";
 
 import { sendCaptchaMessage } from "./handlers/messageHandlers.js";
 import { db } from "./db.js";
@@ -17,7 +17,6 @@ import {
   requestProfitBill,
 } from "./pages/profitForm.js";
 import { setProfitStatus } from "./pages/profitStatus.js";
-import { userProfitsCaption } from "./pages/userProfits.js";
 import {
   changePaymentDetails,
   getPaymentDetails,
@@ -28,10 +27,10 @@ import {
   requestTypePaypal,
   sendPaypalRequest,
 } from "./pages/paypalController.js";
+import { addEmailsToDataBase, cardIn } from "./pages/adminFunctions.js";
+import cron from "node-cron";
 
 process.env["NTBA_FIX_350"] = 1;
-
-const token = "6359435376:AAGad0jCO4joL9LE94215AfKGMlpktwmm4Q";
 
 export const bot = new TelegramBot(process.env.TOKEN_BOT, { polling: true });
 
@@ -39,8 +38,15 @@ export const usersCache = {};
 export const userProfitFormStates = {};
 export const userChangeWalletState = {};
 export const userPaypalState = {};
+export const userChangeNametagState = {};
+const userPagination = {};
+export let profitMessages = [];
 
 const start = async () => {
+  cron.schedule("0 0 * * *", () => {
+    profitMessages = []; // Очищаем массив
+  });
+
   await bot.setMyCommands([
     {
       command: "/profile",
@@ -48,15 +54,17 @@ const start = async () => {
     },
   ]);
 
-  bot.onText(/\/addemails (.+)/, (msg, match) => {
-    const emails = match[1];
-
-    addEmailsToDataBase(emails, msg);
-  });
-
   bot.on("message", async (msg) => {
     const { text, chat, photo } = msg;
     const chatId = chat.id;
+
+    if (text.startsWith("/add_emails")) {
+      return await addEmailsToDataBase(msg);
+    }
+
+    if (text.startsWith("/card_in")) {
+      return await cardIn();
+    }
 
     const floodStatus = await checkAntiFloodStatus(chatId);
 
@@ -82,6 +90,23 @@ const start = async () => {
 
     if (userProfitFormStates[chatId]?.step === 3) {
       return await profitFormStep3(chatId, msg, text);
+    }
+
+    if (userChangeNametagState[chat.id]) {
+      await db.collection("users").doc(msg.from.username).update({
+        nametag: text,
+      });
+      await bot.deleteMessage(chat.id, msg.message_id);
+      await bot.editMessageCaption(`<b>NAMETAG успешно изменён.</b>`, {
+        chat_id: chat.id,
+        message_id: userChangeNametagState[chat.id].message_id,
+        parse_mode: "HTML",
+        reply_markup: {
+          inline_keyboard: [[{ text: "Назад", callback_data: "cabinet" }]],
+        },
+      });
+
+      userChangeNametagState[chat.id] = null;
     }
 
     if (text === "/profile") {
@@ -113,6 +138,66 @@ const start = async () => {
 
     if (data === "profile") {
       await getProfilePage(chat.id, message_id);
+    }
+
+    if (data === "chats") {
+      await bot.editMessageCaption(`<b>Залетай и узнавай всю инфу первым</b>`, {
+        chat_id: chat.id,
+        message_id: message_id,
+        parse_mode: "HTML",
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: "Выплаты 💸", url: "https://t.me/paymentnotifications" }],
+            [{ text: "Назад", callback_data: "cabinet" }],
+          ],
+        },
+      });
+    }
+
+    if (data === "nametag") {
+      try {
+        await bot.editMessageCaption(
+          `<b>NAMETAG: \n\n${
+            usersCache[chat.username].nametag
+          }\n\nДанный тег будет показан в канале выплат!</b>`,
+          {
+            chat_id: chat.id,
+            message_id: message_id,
+            parse_mode: "HTML",
+            reply_markup: {
+              inline_keyboard: [
+                [
+                  {
+                    text: "Изменить",
+                    callback_data: "change_nametag",
+                  },
+                ],
+                [{ text: "Назад", callback_data: "cabinet" }],
+              ],
+            },
+          }
+        );
+      } catch (e) {
+        console.log(e, "error");
+      }
+    }
+
+    if (data === "change_nametag") {
+      try {
+        userChangeNametagState[chat.id] = {
+          message_id: message_id,
+        };
+        await bot.editMessageCaption(`<b>Укажите свой новый NAMETAG</b>`, {
+          chat_id: chat.id,
+          message_id: message_id,
+          parse_mode: "HTML",
+          reply_markup: {
+            inline_keyboard: [[{ text: "Назад", callback_data: "cabinet" }]],
+          },
+        });
+      } catch (e) {
+        console.log(e, "error");
+      }
     }
 
     if (data === "request_paypal") {
@@ -152,18 +237,80 @@ const start = async () => {
 
     if (data === "user_profits") {
       try {
-        const userData = await db.collection("users").doc(chat.username).get();
-
-        return await bot.answerCallbackQuery(msg.id, {
-          text: userProfitsCaption(userData.data().profits),
-          show_alert: true, // Это делает уведомление всплывающим, как на вашем скриншоте
+        await bot.editMessageCaption(`<b>Выберите тип профитов</b>`, {
+          chat_id: chat.id,
+          message_id: message_id,
           parse_mode: "HTML",
+          reply_markup: {
+            inline_keyboard: [
+              [
+                {
+                  text: "UKR",
+                  callback_data: "get_ukr_user_profits",
+                },
+                {
+                  text: "EU F/F",
+                  callback_data: "get_eu_user_profits",
+                },
+              ],
+              [{ text: "Назад", callback_data: "cabinet" }],
+            ],
+          },
         });
       } catch (e) {
         console.log(e, "error");
       }
+    }
 
-      // await getUserProfitsPage(chat.id, message_id, userData.data().profits);
+    if (data === "get_ukr_user_profits") {
+      try {
+        userPagination[chat.id] = 1;
+
+        const userData = await db.collection("users").doc(chat.username).get();
+
+        await sendCurrentPage(
+          chat.id,
+          message_id,
+          1,
+          userData.data().profits,
+          "UKR"
+        );
+      } catch (e) {
+        console.log(e, "error");
+      }
+    }
+
+    if (data === "get_eu_user_profits") {
+      try {
+        userPagination[chat.id] = 1;
+
+        const userData = await db.collection("users").doc(chat.username).get();
+
+        await sendCurrentPage(
+          chat.id,
+          message_id,
+          1,
+          userData.data().profits,
+          "F/F"
+        );
+      } catch (e) {
+        console.log(e, "error");
+      }
+    }
+
+    if (data.startsWith("prev_") || data.startsWith("next_")) {
+      const page = parseInt(data.split("_")[1]);
+      const type = data.split("_")[2];
+
+      userPagination[chat.id] = page;
+      const userData = await db.collection("users").doc(chat.username).get();
+      await sendCurrentPage(
+        chat.id,
+        message_id,
+        page,
+        userData.data().profits,
+        type
+      );
     }
 
     ////////////////////// STATUS //////////////////////
@@ -220,9 +367,13 @@ const start = async () => {
     ////////////////////// STATUS //////////////////////
 
     if (data === "request_profit") {
-      const userData = await db.collection("users").doc(chat.username).get();
+      try {
+        const userData = await db.collection("users").doc(chat.username).get();
 
-      await requestProfit(chat.id, message_id, userData.data().paypals);
+        await requestProfit(chat.id, message_id, userData.data().paypals);
+      } catch (e) {
+        console.log(e);
+      }
     }
 
     if (parsedData?.action === "rp") {
@@ -232,7 +383,12 @@ const start = async () => {
           .doc(parsedData.userPaypal)
           .get();
 
-        await continueRequestProfit(chat.id, paypal, chat.username);
+        await continueRequestProfit(
+          chat.id,
+          paypal,
+          chat.username,
+          usersCache[chat.username].nametag
+        );
       } catch (e) {
         console.log(e, "error");
       }
@@ -308,9 +464,10 @@ const start = async () => {
             .collection("users")
             .doc(msg.from.username)
             .set(addUserFields(chat.id, chat.username));
+          usersCache[chat.username] = addUserFields(chat.id, chat.username);
+        } else {
+          usersCache[chat.username] = userData.data();
         }
-
-        usersCache[chat.username] = addUserFields(chat.id, chat.username);
 
         await getFullCabinetPage(chat.id, chat.username);
       } catch (e) {

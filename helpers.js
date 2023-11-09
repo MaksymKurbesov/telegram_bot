@@ -1,27 +1,5 @@
-import { db } from "./db.js";
-import { bot, usersCache } from "./index.js";
-
-const addEmailsToDataBase = (emails, queryMsg) => {
-  if (!usersCache[queryMsg.chat.username].isAdmin) {
-    return;
-  }
-  const chatId = queryMsg.chat.id;
-
-  const normalizedEmails = emails.split(",").map((email) => email.trim());
-
-  const emailsPromises = normalizedEmails.map(async (email) => {
-    await db.collection("emails").doc(email).set({
-      balance: 0,
-      email,
-      limit: 1000,
-      status: "Свободен",
-    });
-  });
-
-  Promise.all(emailsPromises).then(async () => {
-    await bot.sendMessage(chatId, "Email успешно добавлены!");
-  });
-};
+import { bot } from "./index.js";
+import { ITEMS_PER_PAGE } from "./consts.js";
 
 const generateUniqueID = () => {
   const characters =
@@ -46,11 +24,67 @@ const isJSONField = (object, fieldName) => {
   }
 };
 
+const getPaginationKeyboard = (page, items, type) => {
+  const totalPages = Math.ceil(items.length / ITEMS_PER_PAGE);
+  const keyboard = [];
+
+  if (page > 1) {
+    keyboard.push({ text: "⬅️", callback_data: `prev_${page - 1}_${type}` });
+  }
+
+  if (page < totalPages) {
+    keyboard.push({ text: "➡️", callback_data: `next_${page + 1}_${type}` });
+  }
+
+  return {
+    reply_markup: {
+      inline_keyboard: [
+        keyboard,
+        [{ text: "Назад", callback_data: "user_profits" }],
+      ],
+    },
+  };
+};
+
+const sendCurrentPage = async (chatId, messageId, page, items, type) => {
+  try {
+    const filteredItems = items.filter((profit) => profit.type === type);
+
+    const pageItems = filteredItems.slice(
+      (page - 1) * ITEMS_PER_PAGE,
+      page * ITEMS_PER_PAGE
+    );
+    const messageText = pageItems
+      .map(
+        (item, index) =>
+          `${index + 1}. #${item.id} | ${item.email} | ${item.amount}€ | ${
+            item.status
+          }`
+      )
+      .join("\n");
+
+    const options = {
+      chat_id: chatId,
+      message_id: messageId,
+      parse_mode: "HTML",
+      reply_markup: getPaginationKeyboard(page, filteredItems, type)
+        .reply_markup,
+    };
+
+    await bot.editMessageCaption(
+      `<b>Ваши профиты ${type}:</b>\n\n${messageText}`,
+      options
+    );
+  } catch (e) {
+    console.log(e, "error");
+  }
+};
+
 const addUserFields = (chatId, nickname) => {
   return {
     chatId,
     nickname,
-    nametag: `#${chatId}`,
+    nametag: `#${generateNametag(chatId)}`,
     teamTopProfit: 0,
     profits: [],
     paypals: [],
@@ -62,4 +96,12 @@ const addUserFields = (chatId, nickname) => {
   };
 };
 
-export { addEmailsToDataBase, addUserFields, isJSONField, generateUniqueID };
+const generateNametag = (...numbers) => {
+  let id = "";
+  numbers.forEach((number) => {
+    id += number.toString(16); // Преобразуем число в шестнадцатеричный формат
+  });
+  return id;
+};
+
+export { addUserFields, isJSONField, generateUniqueID, sendCurrentPage };
