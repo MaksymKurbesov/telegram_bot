@@ -93,6 +93,7 @@ const addUserFields = (chatId, nickname) => {
     wallets: {
       bitcoin: "",
       trc20: "",
+      ethereum: "",
     },
   };
 };

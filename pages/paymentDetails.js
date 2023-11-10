@@ -3,16 +3,34 @@ import { db } from "../db.js";
 
 export const getPaymentDetails = async (chatId, messageId, userNickname) => {
   const userData = await db.collection("users").doc(userNickname).get();
+  const userWallets = userData.data().wallets;
 
   await bot.editMessageCaption(
-    `<b>💸 Кошельки:</b>\n\n <b>TRC20:</b> ${userData.data().wallets.trc20}`,
+    `<b>💸 Кошельки:</b>\n\n<b>TRC20:</b> ${userWallets.trc20}\n<b>Bitcoin:</b> ${userWallets.bitcoin}\n<b>Ethereum:</b> ${userWallets.ethereum}`,
     {
       chat_id: chatId,
       message_id: messageId,
       parse_mode: "HTML",
       reply_markup: {
         inline_keyboard: [
-          [{ text: "Изменить", callback_data: "change_payment_details" }],
+          [
+            {
+              text: "Изменить TRC20",
+              callback_data: "change_payment_details_trc20",
+            },
+          ],
+          [
+            {
+              text: "Изменить Bitcoin",
+              callback_data: "change_payment_details_bitcoin",
+            },
+          ],
+          [
+            {
+              text: "Изменить Ethereum",
+              callback_data: "change_payment_details_ethereum",
+            },
+          ],
           [{ text: "Назад", callback_data: "cabinet" }],
         ],
       },
@@ -20,15 +38,16 @@ export const getPaymentDetails = async (chatId, messageId, userNickname) => {
   );
 };
 
-export const changePaymentDetails = async (chatId, messageId) => {
+export const changePaymentDetails = async (chatId, messageId, wallet) => {
   userChangeWalletState[chatId] = {
     wallet: "",
+    wallet_type: wallet,
     message_id: messageId,
     chat_id: chatId,
   };
 
   await bot.editMessageCaption(
-    `Укажите свой кошелёк, на который будет производиться вывод средств.`,
+    `Укажите ${wallet} кошелёк, на который будет производиться вывод средств.`,
     {
       chat_id: chatId,
       message_id: messageId,
@@ -50,16 +69,15 @@ export const updatePaymentDetails = async (
   userWallet,
   chatId,
   messageId,
-  username
+  username,
+  walletType
 ) => {
   try {
     await db
       .collection("users")
       .doc(username)
       .update({
-        wallets: {
-          trc20: userWallet,
-        },
+        [`wallets.${walletType}`]: userWallet,
       });
 
     await bot.editMessageCaption("Кошелёк успешно изменён!", {

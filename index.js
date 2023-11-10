@@ -84,7 +84,13 @@ const start = async () => {
     }
 
     if (userChangeWalletState[chatId]) {
-      await updatePaymentDetails(text, chatId, msg.message_id, chat.username);
+      await updatePaymentDetails(
+        text,
+        chatId,
+        msg.message_id,
+        chat.username,
+        userChangeWalletState[chatId].wallet_type
+      );
     }
 
     if (photo && userProfitFormStates[chatId]?.step === 1) {
@@ -465,9 +471,15 @@ const start = async () => {
       await getPaymentDetails(chat.id, message_id, userNickname);
     }
 
-    if (data === "change_payment_details") {
-      await changePaymentDetails(chat.id, message_id);
+    if (data.startsWith("change_payment_details")) {
+      const wallet = data.split("_")[3];
+
+      await changePaymentDetails(chat.id, message_id, wallet);
     }
+
+    // if (data === "change_payment_details") {
+    //   await changePaymentDetails(chat.id, message_id);
+    // }
 
     if (parsedData?.action === "email_selected") {
       try {
