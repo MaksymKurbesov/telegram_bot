@@ -1,5 +1,6 @@
 import { bot } from "./index.js";
 import { ITEMS_PER_PAGE } from "./consts.js";
+import { db } from "./db.js";
 
 const generateUniqueID = () => {
   const characters =
@@ -76,7 +77,7 @@ const sendCurrentPage = async (chatId, messageId, page, items, type) => {
       options
     );
   } catch (e) {
-    console.log(e, "error");
+    console.log(e, "sendCurrentPage");
   }
 };
 
@@ -130,10 +131,32 @@ const generateNametag = (numberSet) => {
   return hash;
 };
 
+const countEmailsByType = async () => {
+  // Получение всех email'ов из коллекции
+  const emailsRef = db.collection("emails");
+  const snapshot = await emailsRef.get();
+
+  // Инициализация счетчиков для каждого типа
+  let typeCounters = {};
+
+  // Подсчет количества email'ов каждого типа
+  snapshot.forEach((doc) => {
+    const { type } = doc.data();
+    if (typeCounters[type]) {
+      typeCounters[type] += 1;
+    } else {
+      typeCounters[type] = 1;
+    }
+  });
+
+  return typeCounters;
+};
+
 export {
   addUserFields,
   isJSONField,
   generateUniqueID,
   sendCurrentPage,
   extractValue,
+  countEmailsByType,
 };

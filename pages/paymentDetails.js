@@ -91,6 +91,6 @@ export const updatePaymentDetails = async (
     await bot.deleteMessage(chatId, messageId);
     delete userChangeWalletState[chatId];
   } catch (e) {
-    console.log(e);
+    console.log(e, "updatePaymentDetails");
   }
 };

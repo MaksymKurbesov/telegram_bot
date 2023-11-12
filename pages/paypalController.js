@@ -32,6 +32,27 @@ const requestPaypal = async (chatId, messageId) => {
   );
 };
 
+const sendWaitMessage = async (chatId, messageId) => {
+  await bot.editMessageCaption(
+    `<b>Подождите 1 минуту для создания новой заявки!</b>`,
+    {
+      chat_id: chatId,
+      message_id: messageId,
+      parse_mode: "HTML",
+      reply_markup: {
+        inline_keyboard: [
+          [
+            {
+              text: `Назад`,
+              callback_data: "cabinet",
+            },
+          ],
+        ],
+      },
+    }
+  );
+};
+
 const requestTypePaypal = async (chatId, messageId, type) => {
   userPaypalState[chatId].paypal = type;
 
@@ -150,4 +171,4 @@ const getPaypalUKROptions = () => {
   };
 };
 
-export { requestPaypal, requestTypePaypal, sendPaypalRequest };
+export { requestPaypal, requestTypePaypal, sendPaypalRequest, sendWaitMessage };

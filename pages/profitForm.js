@@ -1,6 +1,6 @@
 import { bot, profitMessages, userProfitFormStates } from "../index.js";
 import { generateUniqueID } from "../helpers.js";
-import { PAYMENTS_CHAT_ID, PAYPALS_PROFITS_CHAT_ID } from "../consts.js";
+import { PAYPALS_PROFITS_CHAT_ID } from "../consts.js";
 import { db } from "../db.js";
 import { FieldValue } from "firebase-admin/firestore";
 
@@ -42,7 +42,7 @@ export const continueRequestProfit = async (
       },
     };
   } catch (e) {
-    console.log(e);
+    console.log(e, "continueRequestProfit");
   }
 };
 
@@ -65,7 +65,7 @@ export const requestProfitBill = async (chatId) => {
       }
     );
   } catch (e) {
-    console.log(e);
+    console.log(e, "requestProfitBill");
   }
 };
 
@@ -89,7 +89,7 @@ export const requestProfitAmount = async (chatId) => {
 
     userProfitFormStates[chatId].step++;
   } catch (e) {
-    console.log(e);
+    console.log(e, "requestProfitAmount");
   }
 };
 
@@ -116,7 +116,7 @@ export const profitFormStep1 = async (photo, chatId, msg) => {
       }
     );
   } catch (e) {
-    console.log(e);
+    console.log(e, "profitFormStep1");
   }
 };
 
@@ -143,7 +143,7 @@ export const profitFormStep2 = async (chatId, msg, text) => {
       }
     );
   } catch (e) {
-    console.log(e);
+    console.log(e, "profitFormStep2");
   }
 };
 
@@ -187,20 +187,8 @@ export const profitFormStep3 = async (chatId, msg, text) => {
 
     await bot.deleteMessage(chatId, msg.message_id);
 
-    // const sentMessage = await bot.sendMessage(
-    //   PAYMENTS_CHAT_ID,
-    //   `<b>Paypal:</b> ${formData.type}\n<b>Пользователь:</b> ${formData.nametag}\n<b>Сумма:</b> ${formData.profitAmount}€`,
-    //   {
-    //     parse_mode: "HTML",
-    //     reply_markup: {
-    //       inline_keyboard: [[{ text: "Ожидание", callback_data: "status" }]],
-    //     },
-    //   }
-    // );
-
-    // formData.payment_message_id = sentMessage.message_id;
     const sendPhoto = await bot.sendPhoto(PAYPALS_PROFITS_CHAT_ID, photo, {
-      caption: `<b>REQUEST PROFIT!</b>\n\n<b>Профит ID:</b> #${formData.id}\n<b>Тип: ${formData.type}</b>\n<b>Paypal:</b> ${formData.paypal}\n<b>Сумма:</b> ${formData.profitAmount}€\n<b>Имя:</b> ${formData.name}\n\n🟢 Текущий статус профита: Ожидание\n\n---------------------\nprofit_message_id: ${formData.message_id}\nuser_chat_id: ${formData.chat_id}\nuser: ${formData.nickname}\nnametag: ${formData.nametag}`,
+      caption: `<b>REQUEST PROFIT!</b>\n\n<b>Профит ID:</b> #${formData.id}\n<b>Тип: ${formData.type}</b>\n<b>Paypal:</b> ${formData.paypal}\n<b>Сумма:</b> ${formData.profitAmount}€\n<b>Имя:</b> ${formData.name}\n\n🟢 Текущий статус профита: Ожидание\n\n---------------------\nprofit_message_id: ${formData.message_id}\nuser_chat_id: ${formData.chat_id}\nuser: ${formData.nickname}\nnametag: ${formData.nametag}\npayment_message_id: пусто`,
       parse_mode: "HTML",
       reply_markup: {
         inline_keyboard: profitStatusButtons(),
@@ -228,23 +216,34 @@ export const profitFormStep3 = async (chatId, msg, text) => {
         }
       )
       .then(async () => {
-        await db
-          .collection("users")
-          .doc(formData.nickname)
-          .update({
-            profits: FieldValue.arrayUnion({
-              id: formData.id,
-              email: formData.paypal,
-              amount: +formData.profitAmount,
-              name: formData.name,
-              type: formData.type,
-              date: `${localDate} ${localTime}`,
-              status: "Ожидание",
-            }),
-          });
+        const userRef = db.collection("users").doc(formData.nickname);
+        const doc = await userRef.get();
+
+        if (!doc.exists) {
+          console.log("No such document!");
+          return;
+        }
+
+        const userData = doc.data();
+        const newPaypals = userData.paypals.filter(
+          (paypal) => paypal.email !== formData.paypal
+        );
+
+        await userRef.update({
+          profits: FieldValue.arrayUnion({
+            id: formData.id,
+            email: formData.paypal,
+            amount: +formData.profitAmount,
+            name: formData.name,
+            type: formData.type,
+            date: `${localDate} ${localTime}`,
+            status: "Ожидание",
+          }),
+          paypals: formData.type === "F/F" ? newPaypals : userData.paypals,
+        });
         delete userProfitFormStates[chatId];
       });
   } catch (e) {
-    console.log(e);
+    console.log(e, "profitFormStep3");
   }
 };

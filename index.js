@@ -1,11 +1,6 @@
 import TelegramBot from "node-telegram-bot-api";
 import { checkAntiFloodStatus } from "./floodSystem.js";
-import {
-  addUserFields,
-  extractValue,
-  isJSONField,
-  sendCurrentPage,
-} from "./helpers.js";
+import { addUserFields, isJSONField, sendCurrentPage } from "./helpers.js";
 
 import { sendCaptchaMessage } from "./handlers/messageHandlers.js";
 import { db } from "./db.js";
@@ -31,10 +26,17 @@ import {
   requestPaypal,
   requestTypePaypal,
   sendPaypalRequest,
+  sendWaitMessage,
 } from "./pages/paypalController.js";
-import { addEmailsToDataBase, cardIn } from "./pages/adminFunctions.js";
+import {
+  addEmailsToDataBase,
+  cardIn,
+  getAdminPanel,
+  sendAdminPanel,
+  sendMessageToAllUser,
+} from "./pages/adminFunctions.js";
 import cron from "node-cron";
-import { PAYMENTS_CHAT_ID } from "./consts.js";
+import { ADMIN_PANEL_CHAT_ID, BOT_CHAT_ID } from "./consts.js";
 
 process.env["NTBA_FIX_350"] = 1;
 
@@ -48,12 +50,10 @@ export const userChangeNametagState = {};
 const userPagination = {};
 export let profitMessages = [];
 const usersPaypalTimeout = {};
+export let adminAddEmailType = null;
+export let WORK_STATUS = false;
 
 const start = async () => {
-  cron.schedule("0 0 * * *", () => {
-    profitMessages = []; // Очищаем массив
-  });
-
   await bot.setMyCommands([
     {
       command: "/profile",
@@ -64,13 +64,31 @@ const start = async () => {
   bot.on("message", async (msg) => {
     const { text, chat, photo } = msg;
     const chatId = chat.id;
+    const isAdminChat = chatId === Number(ADMIN_PANEL_CHAT_ID);
 
-    if (text.startsWith("/add_emails")) {
-      return await addEmailsToDataBase(msg);
+    if (isAdminChat && text?.startsWith("/all")) {
+      const parts = text.split("/all");
+      const message = parts[1].trim();
+      await sendMessageToAllUser(message);
     }
 
-    if (text.startsWith("/card_in")) {
-      return await cardIn();
+    if (isAdminChat && text === "/admin") {
+      return sendAdminPanel(chatId, WORK_STATUS);
+    }
+
+    if (adminAddEmailType && isAdminChat) {
+      const emails = text.split(";");
+      if (emails.length === 0) {
+        return;
+      }
+
+      addEmailsToDataBase(emails, adminAddEmailType, msg).then(() => {
+        adminAddEmailType = null;
+      });
+    }
+
+    if (isAdminChat) {
+      return;
     }
 
     const floodStatus = await checkAntiFloodStatus(chatId);
@@ -138,21 +156,41 @@ const start = async () => {
 
     let parts = message.caption?.split("user: ");
 
+    if (
+      chat.id === Number(BOT_CHAT_ID) &&
+      !usersCache[chat.username] &&
+      data !== "captcha_lion"
+    ) {
+      return sendCaptchaMessage(message);
+    }
+
     if (parts?.length > 1) {
       username = parts[1].split("\n")[0];
     }
 
-    if (
-      !usersCache[chat.username] &&
-      message.from?.id === 6359435376 &&
-      data !== "captcha_lion" &&
-      data !== "email_selected"
-    ) {
-      return await sendCaptchaMessage(message);
-    }
-
     if (isJSONField(msg, "data")) {
       parsedData = JSON.parse(data);
+    }
+
+    if (data === "start_work") {
+      WORK_STATUS = true;
+      await sendMessageToAllUser("<b>Начинаем работу! 💸</b>");
+      await getAdminPanel(chat.id, message_id, WORK_STATUS);
+    }
+
+    if (data === "stop_work") {
+      WORK_STATUS = false;
+      await sendMessageToAllUser("<b>Заканчиваем работу! 👹</b>");
+      await getAdminPanel(chat.id, message_id, WORK_STATUS);
+    }
+
+    if (data === "card_in") {
+      await cardIn();
+    }
+
+    if (data === "restart_card_in") {
+      profitMessages = [];
+      await bot.sendMessage(chat.id, "Выплаты сделаны! 👌");
     }
 
     if (data === "cabinet") {
@@ -201,7 +239,7 @@ const start = async () => {
           }
         );
       } catch (e) {
-        console.log(e, "error");
+        console.log(e, "data === nametag");
       }
     }
 
@@ -219,7 +257,7 @@ const start = async () => {
           },
         });
       } catch (e) {
-        console.log(e, "error");
+        console.log(e, 'data === "change_nametag"');
       }
     }
 
@@ -227,24 +265,7 @@ const start = async () => {
       if (!usersPaypalTimeout[chat.id]) {
         await requestPaypal(chat.id, message_id);
       } else {
-        await bot.editMessageCaption(
-          `<b>Подождите 1 минуту для создания новой заявки!</b>`,
-          {
-            chat_id: chat.id,
-            message_id: message_id,
-            parse_mode: "HTML",
-            reply_markup: {
-              inline_keyboard: [
-                [
-                  {
-                    text: `Назад`,
-                    callback_data: "cabinet",
-                  },
-                ],
-              ],
-            },
-          }
-        );
+        await sendWaitMessage(chat.id, message_id);
       }
     }
 
@@ -279,7 +300,7 @@ const start = async () => {
           usersPaypalTimeout[chat.id] = false;
         }, 60000);
       } catch (e) {
-        console.log(e);
+        console.log(e, "data === isPaypalAmount");
       }
     }
 
@@ -306,7 +327,7 @@ const start = async () => {
           },
         });
       } catch (e) {
-        console.log(e, "error");
+        console.log(e, '(data === "user_profits")');
       }
     }
 
@@ -324,7 +345,7 @@ const start = async () => {
           "UKR"
         );
       } catch (e) {
-        console.log(e, "error");
+        console.log(e, 'data === "get_ukr_user_profits"');
       }
     }
 
@@ -342,9 +363,70 @@ const start = async () => {
           "F/F"
         );
       } catch (e) {
-        console.log(e, "error");
+        console.log(e, 'data === "get_eu_user_profits"');
       }
     }
+
+    ///////////////// ADMIN /////////////////
+
+    if (data === "admin_panel") {
+      await getAdminPanel(chat.id, message_id, WORK_STATUS);
+    }
+
+    if (data === "add_paypals") {
+      await bot.editMessageText("<b>Какой тип палки загрузить</b>", {
+        chat_id: chat.id,
+        message_id: message_id,
+        parse_mode: "HTML",
+        reply_markup: {
+          inline_keyboard: [
+            [
+              { text: "EU F/F", callback_data: "add_paypals_f/f" },
+              { text: "UKR", callback_data: "add_paypals_ukr" },
+            ],
+            [{ text: "Назад", callback_data: "admin_panel" }],
+          ],
+        },
+      });
+    }
+
+    if (data === "add_paypals_f/f") {
+      adminAddEmailType = "F/F";
+
+      await bot.editMessageText(
+        "<b>Загрузка EU F/F\n\nУкажите палки в формате\n\n<code>paypal@gmail.com;paypal2@gmail.com;paypayl3@gmail.com</code></b>",
+        {
+          chat_id: chat.id,
+          message_id: message_id,
+          parse_mode: "HTML",
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: "Назад", callback_data: "admin_panel" }],
+            ],
+          },
+        }
+      );
+    }
+
+    if (data === "add_paypals_ukr") {
+      adminAddEmailType = "UKR";
+
+      await bot.editMessageText(
+        "<b>Загрузка UKR\n\nУкажите палки в формате\n\n<code>paypal@gmail.com;paypal2@gmail.com;paypayl3@gmail.com</code></b>",
+        {
+          chat_id: chat.id,
+          message_id: message_id,
+          parse_mode: "HTML",
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: "Назад", callback_data: "admin_panel" }],
+            ],
+          },
+        }
+      );
+    }
+
+    ///////////////// ADMIN /////////////////
 
     if (data.startsWith("prev_") || data.startsWith("next_")) {
       const page = parseInt(data.split("_")[1]);
@@ -365,20 +447,6 @@ const start = async () => {
 
     if (data === "money_on_paypal") {
       await setProfitStatus("НА ПАЛКЕ!", message, username);
-      const type = extractValue(message.caption, "Тип: ");
-      const amount = extractValue(message.caption, "Сумма: ");
-      const nametag = extractValue(message.caption, "nametag: ");
-
-      await bot.sendMessage(
-        PAYMENTS_CHAT_ID,
-        `<b>Paypal:</b> ${type}\n<b>Пользователь:</b> ${nametag}\n<b>Сумма:</b> ${amount}€`,
-        {
-          parse_mode: "HTML",
-          reply_markup: {
-            inline_keyboard: [[{ text: "Ожидание", callback_data: "status" }]],
-          },
-        }
-      );
     }
 
     if (data === "instant") {
@@ -432,7 +500,7 @@ const start = async () => {
 
         await requestProfit(chat.id, message_id, userData.data().paypals);
       } catch (e) {
-        console.log(e);
+        console.log(e, '(data === "request_profit")');
       }
     }
 
@@ -450,7 +518,7 @@ const start = async () => {
           usersCache[chat.username].nametag
         );
       } catch (e) {
-        console.log(e, "error");
+        console.log(e, '(parsedData?.action === "rp")');
       }
     }
 
@@ -476,10 +544,6 @@ const start = async () => {
 
       await changePaymentDetails(chat.id, message_id, wallet);
     }
-
-    // if (data === "change_payment_details") {
-    //   await changePaymentDetails(chat.id, message_id);
-    // }
 
     if (parsedData?.action === "email_selected") {
       try {
@@ -510,9 +574,6 @@ const start = async () => {
           message_id: message.message_id,
         });
 
-        console.log(userNickname, "userNickname");
-        console.log(usersCache, "usersCache");
-
         await bot.sendMessage(
           usersCache[userNickname].chatId,
           `🟢 Выдан PayPal: <b>${paypalType} | ${parsedData.email}</b>`,
@@ -521,13 +582,16 @@ const start = async () => {
           }
         );
       } catch (e) {
-        console.log(e, "error");
+        console.log(e, 'parsedData?.action === "email_selected"');
       }
     }
 
     if (data === "captcha_lion") {
       try {
-        const userData = await db.collection("users").doc(chat.username).get();
+        const userData = await db
+          .collection("users")
+          .doc(msg.from.username)
+          .get();
 
         if (!userData.exists) {
           await db
@@ -541,7 +605,7 @@ const start = async () => {
 
         await getFullCabinetPage(chat.id, chat.username);
       } catch (e) {
-        console.log(e, "error");
+        console.log(e, "captcha lion error");
       }
     }
 
