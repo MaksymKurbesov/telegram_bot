@@ -515,7 +515,7 @@ const start = async () => {
           chat.id,
           paypal,
           chat.username,
-          usersCache[chat.username].nametag
+          usersCache[chat.username].nametag /// error
         );
       } catch (e) {
         console.log(e, '(parsedData?.action === "rp")');
