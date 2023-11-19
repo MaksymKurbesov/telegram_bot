@@ -1,18 +1,30 @@
+import { getIbansPage } from "./handlers/ibans.js";
+
+process.env["NTBA_FIX_350"] = 1;
+
 import TelegramBot from "node-telegram-bot-api";
 import { checkAntiFloodStatus } from "./floodSystem.js";
-import { addUserFields, isJSONField, sendCurrentPage } from "./helpers.js";
+import {
+  isArrayOfEmails,
+  isChatWithoutCaptcha,
+  isJSONField,
+  sendCurrentPage,
+  updateAmountById,
+  updateNameById,
+} from "./helpers.js";
 
-import { sendCaptchaMessage } from "./handlers/messageHandlers.js";
+import { sendCaptchaMessage } from "./handlers/captcha.js";
 import { db } from "./db.js";
 import { getCabinetPage, getFullCabinetPage } from "./pages/cabinet.js";
 import { getProfilePage } from "./pages/profile.js";
 import { requestProfit } from "./pages/requestProfit.js";
-import { FieldValue } from "firebase-admin/firestore";
 import {
   continueRequestProfit,
   profitFormStep1,
   profitFormStep2,
   profitFormStep3,
+  profitFormStep4,
+  profitStatusButtons,
   requestProfitAmount,
   requestProfitBill,
 } from "./pages/profitForm.js";
@@ -31,14 +43,34 @@ import {
 import {
   addEmailsToDataBase,
   cardIn,
+  deletePaypal,
   getAdminPanel,
+  getDeletePaypal,
+  getLoadingPaypalType,
+  loadPaypal,
   sendAdminPanel,
   sendMessageToAllUser,
 } from "./pages/adminFunctions.js";
-import cron from "node-cron";
-import { ADMIN_PANEL_CHAT_ID, BOT_CHAT_ID } from "./consts.js";
-
-process.env["NTBA_FIX_350"] = 1;
+import {
+  ADMIN_PANEL_CHAT_ID,
+  REQUEST_PROFIT_EU_ID,
+  REQUEST_PROFIT_UKR_ID,
+  STATUS_MAP,
+} from "./consts.js";
+import { captchaLion } from "./handlers/captchaLion.js";
+import {
+  renewPaypalTime,
+  sendPaypalEmailToUser,
+} from "./handlers/sendPaypalEmailToUser.js";
+import { getUserProfitsType } from "./handlers/getUserProfitsType.js";
+import { getUserProfits } from "./handlers/getUserProfits.js";
+import {
+  changeNameTag,
+  getNameTag,
+  updateNameTag,
+} from "./handlers/nametag.js";
+import { getSupportPage } from "./handlers/support.js";
+import { getChats } from "./handlers/chats.js";
 
 export const bot = new TelegramBot(process.env.TOKEN_BOT, { polling: true });
 
@@ -47,11 +79,18 @@ export const userProfitFormStates = {};
 export const userChangeWalletState = {};
 export const userPaypalState = {};
 export const userChangeNametagState = {};
-const userPagination = {};
+export const userPagination = {};
+export const renewPaypalUserState = {};
 export let profitMessages = [];
 const usersPaypalTimeout = {};
+export const userSupportState = {};
 export let adminAddEmailType = null;
+export let adminDeleteEmail = null;
 export let WORK_STATUS = false;
+let editableProfit = {
+  message_id: null,
+  chat_id: null,
+};
 
 const start = async () => {
   await bot.setMyCommands([
@@ -62,110 +101,230 @@ const start = async () => {
   ]);
 
   bot.on("message", async (msg) => {
-    const { text, chat, photo } = msg;
-    const chatId = chat.id;
-    const isAdminChat = chatId === Number(ADMIN_PANEL_CHAT_ID);
+    try {
+      const { text, chat, photo } = msg;
+      const chatId = chat.id;
+      const isAdminChat = chatId === Number(ADMIN_PANEL_CHAT_ID);
 
-    if (isAdminChat && text?.startsWith("/all")) {
-      const parts = text.split("/all");
-      const message = parts[1].trim();
-      await sendMessageToAllUser(message);
-    }
+      if (isAdminChat && text?.startsWith("/all")) {
+        const parts = text.split("/all");
+        const message = parts[1].trim();
+        return await sendMessageToAllUser(message);
+      }
 
-    if (isAdminChat && text === "/admin") {
-      return sendAdminPanel(chatId, WORK_STATUS);
-    }
+      if (
+        editableProfit.type === "amount" ||
+        editableProfit.type === "name" ||
+        editableProfit.type === "photo"
+      ) {
+        const updatedAmountCaption = editableProfit.message_caption.replace(
+          /(Сумма:\s*)[^\n]+/,
+          "$1" + `${text}€`
+        );
 
-    if (adminAddEmailType && isAdminChat) {
-      const emails = text.split(";");
-      if (emails.length === 0) {
+        const updatedNameCaption = editableProfit.message_caption.replace(
+          /(Имя:\s*)[^\n]+/,
+          "$1" + `${text}`
+        );
+
+        const updatedObjects = {
+          amount: {
+            caption: updatedAmountCaption,
+            message: `🟢 Сумма профита успешно изменена!`,
+          },
+          name: {
+            caption: updatedNameCaption,
+            message: `🟢 Имя профита успешно изменено!`,
+          },
+          photo: {
+            caption: editableProfit.message_caption,
+            message: `🟢 Фото профита успешно изменено!`,
+          },
+        };
+
+        if (editableProfit.type === "photo") {
+          console.log("photo");
+        } else {
+          const userParts = editableProfit.message_caption.split("user: ");
+          const userAndRest = userParts[1];
+          const user = userAndRest.split("\n")[0];
+
+          const profitIdParts =
+            editableProfit.message_caption.split("Профит ID: ");
+          const profitIdAndRest = profitIdParts[1];
+          const profitId = profitIdAndRest.split("\n")[0];
+
+          const userDoc = await db.collection("users").doc(user);
+          const userData = await userDoc.get();
+
+          if (editableProfit.type === "amount") {
+            const updatedProfits = updateAmountById(
+              userData.data().profits,
+              profitId.split("#")[1],
+              text
+            );
+
+            await userDoc.update({
+              profits: updatedProfits,
+            });
+          }
+
+          if (editableProfit.type === "name") {
+            const updatedProfits = updateNameById(
+              userData.data().profits,
+              profitId.split("#")[1],
+              text
+            );
+
+            await userDoc.update({
+              profits: updatedProfits,
+            });
+          }
+
+          await bot.editMessageCaption(
+            updatedObjects[editableProfit.type].caption,
+            {
+              chat_id: editableProfit.chat_id,
+              message_id: editableProfit.message_id,
+              reply_markup: {
+                inline_keyboard: [
+                  // [
+                  //   {
+                  //     text: "Изменить фото",
+                  //     callback_data: "change_profit_photo",
+                  //   },
+                  // ],
+                  [
+                    {
+                      text: "Изменить сумму",
+                      callback_data: "change_profit_amount",
+                    },
+                  ],
+                  [
+                    {
+                      text: "Изменить имя",
+                      callback_data: "change_profit_name",
+                    },
+                  ],
+                  [{ text: "Назад", callback_data: "back_to_profit_status" }],
+                ],
+              },
+            }
+          );
+        }
+
+        await bot.sendMessage(
+          chatId,
+          updatedObjects[editableProfit.type].message
+        );
+
+        editableProfit = {};
+      }
+
+      if (isAdminChat && text === "/admin") {
+        adminAddEmailType = null;
+        adminDeleteEmail = null;
+        return sendAdminPanel(chatId, WORK_STATUS);
+      }
+
+      if (adminDeleteEmail && isAdminChat) {
+        const emailRegex = /^[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,6}$/;
+
+        if (emailRegex.test(text)) {
+          await deletePaypal(text, chatId);
+          adminDeleteEmail = null;
+        }
+      }
+
+      if (adminAddEmailType && isAdminChat) {
+        const emails = text.split(";");
+
+        if (emails.length === 0 || !isArrayOfEmails(emails)) {
+          return;
+        }
+
+        await addEmailsToDataBase(emails, adminAddEmailType, msg);
+        adminAddEmailType = null;
+      }
+
+      const floodStatus = await checkAntiFloodStatus(chatId);
+
+      if (floodStatus || isChatWithoutCaptcha(chatId)) {
         return;
       }
 
-      addEmailsToDataBase(emails, adminAddEmailType, msg).then(() => {
-        adminAddEmailType = null;
-      });
-    }
+      if (!usersCache[chat.username]) {
+        return await sendCaptchaMessage(msg);
+      }
 
-    if (isAdminChat) {
-      return;
-    }
+      if (userSupportState[chat.username]) {
+        await bot.sendMessage(
+          ADMIN_PANEL_CHAT_ID,
+          `<b>🆘 SUPPORT MESSAGE!</b>\n\nПользователь: <b>${chat.username}</b>\nВопрос: <b>${text}</b>`,
+          {
+            parse_mode: "HTML",
+          }
+        );
 
-    const floodStatus = await checkAntiFloodStatus(chatId);
+        await bot.deleteMessage(chat.id, msg.message_id);
+        await bot.sendMessage(
+          chat.id,
+          "✅ Запрос в саппорт успешно отправлен!"
+        );
+        delete userSupportState[chat.username];
+      }
 
-    if (floodStatus) {
-      return;
-    }
+      if (userChangeWalletState[chatId]) {
+        await updatePaymentDetails(
+          text,
+          chatId,
+          msg.message_id,
+          chat.username,
+          userChangeWalletState[chatId].wallet_type
+        );
+      }
 
-    if (!usersCache[chat.username]) {
-      return await sendCaptchaMessage(msg);
-    }
+      if (photo && userProfitFormStates[chatId]?.step === 1) {
+        return await profitFormStep1(photo, chatId, msg);
+      }
 
-    if (userChangeWalletState[chatId]) {
-      await updatePaymentDetails(
-        text,
-        chatId,
-        msg.message_id,
-        chat.username,
-        userChangeWalletState[chatId].wallet_type
-      );
-    }
+      if (userProfitFormStates[chatId]?.step === 2) {
+        return await profitFormStep2(chatId, msg, text);
+      }
 
-    if (photo && userProfitFormStates[chatId]?.step === 1) {
-      return await profitFormStep1(photo, chatId, msg);
-    }
+      if (userProfitFormStates[chatId]?.step === 3) {
+        return await profitFormStep3(chatId, msg, text);
+      }
 
-    if (userProfitFormStates[chatId]?.step === 2) {
-      return await profitFormStep2(chatId, msg, text);
-    }
+      if (userChangeNametagState[chat.id]) {
+        try {
+          await updateNameTag(chat.id, msg.message_id, msg.from.username, text);
+        } catch (e) {
+          console.log(e, "userChangeNametagState[chat.id]");
+        }
+      }
 
-    if (userProfitFormStates[chatId]?.step === 3) {
-      return await profitFormStep3(chatId, msg, text);
-    }
-
-    if (userChangeNametagState[chat.id]) {
-      await db.collection("users").doc(msg.from.username).update({
-        nametag: text,
-      });
-      await bot.deleteMessage(chat.id, msg.message_id);
-      await bot.editMessageCaption(`<b>NAMETAG успешно изменён.</b>`, {
-        chat_id: chat.id,
-        message_id: userChangeNametagState[chat.id].message_id,
-        parse_mode: "HTML",
-        reply_markup: {
-          inline_keyboard: [[{ text: "Назад", callback_data: "cabinet" }]],
-        },
-      });
-
-      userChangeNametagState[chat.id] = null;
-    }
-
-    if (text === "/profile") {
-      return getFullCabinetPage(chatId, chat.username);
+      if (text === "/profile") {
+        return getFullCabinetPage(chatId, chat.username);
+      }
+    } catch (e) {
+      console.log(e, "error message");
     }
   });
 
   bot.on("callback_query", async (msg) => {
     const { data, message } = msg;
     const { chat, message_id } = message;
-
     const userNickname = usersCache[chat.username]?.nickname;
 
     let parsedData;
-    let username;
-
-    let parts = message.caption?.split("user: ");
 
     if (
-      chat.id === Number(BOT_CHAT_ID) &&
+      !isChatWithoutCaptcha(chat.id) &&
       !usersCache[chat.username] &&
-      data !== "captcha_lion"
+      data !== "correct_captcha"
     ) {
       return sendCaptchaMessage(message);
-    }
-
-    if (parts?.length > 1) {
-      username = parts[1].split("\n")[0];
     }
 
     if (isJSONField(msg, "data")) {
@@ -201,43 +360,21 @@ const start = async () => {
       await getProfilePage(chat.id, message_id);
     }
 
+    if (data === "request_iban") {
+      await getIbansPage(chat.id, message_id);
+    }
+
     if (data === "chats") {
-      await bot.editMessageCaption(`<b>Залетай и узнавай всю инфу первым</b>`, {
-        chat_id: chat.id,
-        message_id: message_id,
-        parse_mode: "HTML",
-        reply_markup: {
-          inline_keyboard: [
-            [{ text: "Выплаты 💸", url: "https://t.me/paymentnotifications" }],
-            [{ text: "Назад", callback_data: "cabinet" }],
-          ],
-        },
-      });
+      await getChats(chat.id, message_id);
+    }
+
+    if (data === "support") {
+      await getSupportPage(chat.id, message_id, msg.from.username);
     }
 
     if (data === "nametag") {
       try {
-        await bot.editMessageCaption(
-          `<b>NAMETAG: \n\n${
-            usersCache[chat.username].nametag
-          }\n\nДанный тег будет показан в канале выплат!</b>`,
-          {
-            chat_id: chat.id,
-            message_id: message_id,
-            parse_mode: "HTML",
-            reply_markup: {
-              inline_keyboard: [
-                [
-                  {
-                    text: "Изменить",
-                    callback_data: "change_nametag",
-                  },
-                ],
-                [{ text: "Назад", callback_data: "cabinet" }],
-              ],
-            },
-          }
-        );
+        await getNameTag(chat.id, message_id, msg.from.username);
       } catch (e) {
         console.log(e, "data === nametag");
       }
@@ -245,27 +382,21 @@ const start = async () => {
 
     if (data === "change_nametag") {
       try {
-        userChangeNametagState[chat.id] = {
-          message_id: message_id,
-        };
-        await bot.editMessageCaption(`<b>Укажите свой новый NAMETAG</b>`, {
-          chat_id: chat.id,
-          message_id: message_id,
-          parse_mode: "HTML",
-          reply_markup: {
-            inline_keyboard: [[{ text: "Назад", callback_data: "cabinet" }]],
-          },
-        });
+        await changeNameTag(chat.id, message_id);
       } catch (e) {
         console.log(e, 'data === "change_nametag"');
       }
     }
 
     if (data === "request_paypal") {
-      if (!usersPaypalTimeout[chat.id]) {
-        await requestPaypal(chat.id, message_id);
-      } else {
-        await sendWaitMessage(chat.id, message_id);
+      try {
+        if (!usersPaypalTimeout[chat.id]) {
+          await requestPaypal(chat.id, message_id);
+        } else {
+          await sendWaitMessage(chat.id, message_id);
+        }
+      } catch (e) {
+        console.log(e, 'data === "request_paypal"');
       }
     }
 
@@ -277,16 +408,7 @@ const start = async () => {
       await requestTypePaypal(chat.id, message_id, "F/F");
     }
 
-    const isPaypalAmount =
-      data === "paypal_0-100" ||
-      data === "paypal_100+" ||
-      data === "paypal_40-100" ||
-      data === "paypal_100-250" ||
-      data === "paypal_250-400" ||
-      data === "paypal_400-500" ||
-      data === "paypal_500+";
-
-    if (isPaypalAmount) {
+    if (data.startsWith("paypal_")) {
       try {
         userPaypalState[chat.id].amount = data;
         await sendPaypalRequest(
@@ -306,64 +428,23 @@ const start = async () => {
 
     if (data === "user_profits") {
       try {
-        await bot.editMessageCaption(`<b>Выберите тип профитов</b>`, {
-          chat_id: chat.id,
-          message_id: message_id,
-          parse_mode: "HTML",
-          reply_markup: {
-            inline_keyboard: [
-              [
-                {
-                  text: "UKR",
-                  callback_data: "get_ukr_user_profits",
-                },
-                {
-                  text: "EU F/F",
-                  callback_data: "get_eu_user_profits",
-                },
-              ],
-              [{ text: "Назад", callback_data: "cabinet" }],
-            ],
-          },
-        });
+        await getUserProfitsType(chat.id, message_id);
       } catch (e) {
         console.log(e, '(data === "user_profits")');
       }
     }
 
-    if (data === "get_ukr_user_profits") {
+    if (data.startsWith("get_user_profits")) {
       try {
-        userPagination[chat.id] = 1;
-
-        const userData = await db.collection("users").doc(chat.username).get();
-
-        await sendCurrentPage(
+        const userProfitsType = data.split("_")[3];
+        await getUserProfits(
           chat.id,
           message_id,
-          1,
-          userData.data().profits,
-          "UKR"
+          msg.from.username,
+          userProfitsType
         );
       } catch (e) {
         console.log(e, 'data === "get_ukr_user_profits"');
-      }
-    }
-
-    if (data === "get_eu_user_profits") {
-      try {
-        userPagination[chat.id] = 1;
-
-        const userData = await db.collection("users").doc(chat.username).get();
-
-        await sendCurrentPage(
-          chat.id,
-          message_id,
-          1,
-          userData.data().profits,
-          "F/F"
-        );
-      } catch (e) {
-        console.log(e, 'data === "get_eu_user_profits"');
       }
     }
 
@@ -374,59 +455,84 @@ const start = async () => {
     }
 
     if (data === "add_paypals") {
-      await bot.editMessageText("<b>Какой тип палки загрузить</b>", {
-        chat_id: chat.id,
-        message_id: message_id,
-        parse_mode: "HTML",
-        reply_markup: {
-          inline_keyboard: [
-            [
-              { text: "EU F/F", callback_data: "add_paypals_f/f" },
-              { text: "UKR", callback_data: "add_paypals_ukr" },
-            ],
-            [{ text: "Назад", callback_data: "admin_panel" }],
-          ],
-        },
-      });
+      await getLoadingPaypalType(chat.id, message_id);
     }
 
-    if (data === "add_paypals_f/f") {
-      adminAddEmailType = "F/F";
+    if (data.startsWith("add_paypals_")) {
+      const paypalType = data.split("_")[2];
+      adminAddEmailType = paypalType === "f/f" ? "F/F" : "UKR";
+      await loadPaypal(paypalType, chat.id, message_id);
+    }
 
-      await bot.editMessageText(
-        "<b>Загрузка EU F/F\n\nУкажите палки в формате\n\n<code>paypal@gmail.com;paypal2@gmail.com;paypayl3@gmail.com</code></b>",
+    if (data === "delete_paypal") {
+      adminDeleteEmail = true;
+      await getDeletePaypal(chat.id, message_id);
+    }
+
+    if (data.startsWith("change_profit")) {
+      const changeProfitType = data.split("_")[2];
+      const regexProfitId = /Профит ID: #(.+)/;
+      const profitId = message.caption.match(regexProfitId);
+
+      editableProfit.message_id = message_id;
+      editableProfit.chat_id = chat.id;
+      editableProfit.message_caption = message.caption;
+      editableProfit.type = changeProfitType;
+
+      if (changeProfitType === "amount") {
+        await bot.sendMessage(
+          chat.id,
+          `<b>ℹ️ Укажите новую сумму для профита #${profitId[1]}!</b>`,
+          {
+            parse_mode: "HTML",
+          }
+        );
+      }
+
+      if (changeProfitType === "name") {
+        await bot.sendMessage(
+          chat.id,
+          `<b>ℹ️ Укажите новое имя для профита #${profitId[1]}!</b>`,
+          {
+            parse_mode: "HTML",
+          }
+        );
+      }
+
+      if (changeProfitType === "photo") {
+        await bot.sendMessage(
+          chat.id,
+          `<b>ℹ️ Отправьте новое фото для профита #${profitId[1]}!</b>`,
+          {
+            parse_mode: "HTML",
+          }
+        );
+      }
+    }
+
+    if (data === "back_to_profit_status") {
+      await bot.editMessageReplyMarkup(
+        { inline_keyboard: profitStatusButtons() },
         {
           chat_id: chat.id,
           message_id: message_id,
-          parse_mode: "HTML",
-          reply_markup: {
-            inline_keyboard: [
-              [{ text: "Назад", callback_data: "admin_panel" }],
-            ],
-          },
-        }
-      );
-    }
-
-    if (data === "add_paypals_ukr") {
-      adminAddEmailType = "UKR";
-
-      await bot.editMessageText(
-        "<b>Загрузка UKR\n\nУкажите палки в формате\n\n<code>paypal@gmail.com;paypal2@gmail.com;paypayl3@gmail.com</code></b>",
-        {
-          chat_id: chat.id,
-          message_id: message_id,
-          parse_mode: "HTML",
-          reply_markup: {
-            inline_keyboard: [
-              [{ text: "Назад", callback_data: "admin_panel" }],
-            ],
-          },
         }
       );
     }
 
     ///////////////// ADMIN /////////////////
+
+    if (data.startsWith("profit-status")) {
+      const status = data.split("-")[2];
+      const parts = message.caption?.split("user: ");
+      const username = parts[1].split("\n")[0];
+
+      await setProfitStatus(STATUS_MAP[status], message, username, chat.id);
+    }
+
+    if (data === "delete_message") {
+      await bot.deleteMessage(chat.id, message_id);
+    }
 
     if (data.startsWith("prev_") || data.startsWith("next_")) {
       const page = parseInt(data.split("_")[1]);
@@ -442,57 +548,6 @@ const start = async () => {
         type
       );
     }
-
-    ////////////////////// STATUS //////////////////////
-
-    if (data === "money_on_paypal") {
-      await setProfitStatus("НА ПАЛКЕ!", message, username);
-    }
-
-    if (data === "instant") {
-      await setProfitStatus("ИНСТАНТ!", message, username);
-    }
-
-    if (data === "stop") {
-      await setProfitStatus("СТОП!", message, username);
-
-      const regexPaypal = /Paypal:\s(.*?)(\n|$)/;
-      const match = message.caption?.match(regexPaypal);
-
-      await db.collection("emails").doc(match[1]).update({
-        status: "Стоп",
-      });
-    }
-
-    if (data === "24_hours") {
-      await setProfitStatus("24 ЧАСА!", message, username);
-    }
-
-    if (data === "fraud") {
-      await setProfitStatus("ФРОД!", message, username);
-    }
-
-    if (data === "verification") {
-      await setProfitStatus("ВЕРИФ!", message, username);
-    }
-
-    if (data === "lock") {
-      await setProfitStatus("ЛОК!", message, username);
-    }
-
-    if (data === "dispute") {
-      await setProfitStatus("ДИСПУТ!", message, username);
-    }
-
-    if (data === "paid") {
-      await setProfitStatus("ВЫПЛАЧЕНО!", message, username);
-    }
-
-    if (data === "delete_message") {
-      await bot.deleteMessage(chat.id, message_id);
-    }
-
-    ////////////////////// STATUS //////////////////////
 
     if (data === "request_profit") {
       try {
@@ -530,13 +585,90 @@ const start = async () => {
       await requestProfitAmount(chat.id);
     }
 
+    ////// FINAL PROFIT STEP /////////
+
+    if (data.startsWith("request_profit_wallet")) {
+      const wallet = data.split("_")[3];
+
+      return await profitFormStep4(chat.id, message, wallet);
+    }
+
     if (data === "cancel_profit") {
       await bot.deleteMessage(chat.id, message_id);
       delete userProfitFormStates[chat.id];
     }
 
+    if (data === "renew_paypal") {
+      if (!renewPaypalUserState[chat.id]) {
+        return;
+      }
+
+      renewPaypalUserState[chat.id] = false;
+
+      const emailRegex = /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/;
+      const matches = message.text.match(emailRegex);
+
+      if (matches) {
+        await renewPaypalTime(chat.id, matches[0], msg.from.username);
+
+        await bot.editMessageReplyMarkup(
+          {
+            inline_keyboard: [
+              [{ text: "Продлена 🟢", callback_data: "null_callback_data" }],
+            ],
+          },
+          {
+            chat_id: chat.id,
+            message_id: message_id,
+          }
+        );
+      }
+    }
+
+    if (data === "refuse_renew_paypal") {
+      renewPaypalUserState[chat.id] = false;
+
+      const emailRegex = /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/;
+      const matches = message.text.match(emailRegex);
+
+      if (matches) {
+        await db.collection("emails").doc(matches[0]).update({
+          status: "Свободен",
+        });
+
+        const userData = await db
+          .collection("users")
+          .doc(msg.from.username)
+          .get();
+
+        const updatedUserPaypals = userData
+          .data()
+          .paypals.filter((paypal) => paypal.email !== matches[0]);
+
+        await db.collection("users").doc(msg.from.username).update({
+          paypals: updatedUserPaypals,
+        });
+
+        await bot.editMessageReplyMarkup(
+          {
+            inline_keyboard: [
+              [{ text: "Отказ 🔴", callback_data: "null_callback_data" }],
+            ],
+          },
+          {
+            chat_id: chat.id,
+            message_id: message_id,
+          }
+        );
+      }
+    }
+
     if (data === "payment_details") {
-      await getPaymentDetails(chat.id, message_id, userNickname);
+      try {
+        await getPaymentDetails(chat.id, message_id, userNickname);
+      } catch (e) {
+        console.log(e, 'data === "payment_details"');
+      }
     }
 
     if (data.startsWith("change_payment_details")) {
@@ -547,69 +679,25 @@ const start = async () => {
 
     if (parsedData?.action === "email_selected") {
       try {
-        const userNickname = message.text.match(/User:\s*(\w+)/)[1];
-        const paypalLimit = message.text.match(/Sum:\s*([\d+\-]+€)/)[1];
-        const updatedText = `${msg.message.text}\n\nВыданная палка: ${parsedData.email}`;
-        const paypalType = message.text.match(/REQUEST\s+(.+)!/)[1];
-
-        await db
-          .collection("users")
-          .doc(userNickname)
-          .update({
-            paypals: FieldValue.arrayUnion({
-              email: parsedData.email,
-              limit: paypalLimit,
-              type: paypalType,
-            }),
-          });
-
-        if (paypalType !== "UKR") {
-          await db.collection("emails").doc(parsedData.email).update({
-            status: "Стоп",
-          });
-        }
-
-        await bot.editMessageText(updatedText, {
-          chat_id: chat.id,
-          message_id: message.message_id,
-        });
-
-        await bot.sendMessage(
-          usersCache[userNickname].chatId,
-          `🟢 Выдан PayPal: <b>${paypalType} | ${parsedData.email}</b>`,
-          {
-            parse_mode: "HTML",
-          }
-        );
+        await sendPaypalEmailToUser(message, parsedData, chat.id);
       } catch (e) {
         console.log(e, 'parsedData?.action === "email_selected"');
       }
     }
 
-    if (data === "captcha_lion") {
+    if (data === "correct_captcha") {
       try {
-        const userData = await db
-          .collection("users")
-          .doc(msg.from.username)
-          .get();
-
-        if (!userData.exists) {
-          await db
-            .collection("users")
-            .doc(msg.from.username)
-            .set(addUserFields(chat.id, chat.username));
-          usersCache[chat.username] = addUserFields(chat.id, chat.username);
-        } else {
-          usersCache[chat.username] = userData.data();
-        }
-
-        await getFullCabinetPage(chat.id, chat.username);
+        await captchaLion(msg.from.username, chat.id);
       } catch (e) {
         console.log(e, "captcha lion error");
       }
     }
 
-    await bot.answerCallbackQuery(msg.id);
+    try {
+      await bot.answerCallbackQuery(msg.id);
+    } catch (e) {
+      console.log(e, "answer");
+    }
   });
 };
 

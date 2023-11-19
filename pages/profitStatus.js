@@ -1,6 +1,10 @@
-import { bot } from "../index.js";
+import { bot, profitMessages } from "../index.js";
 import { db } from "../db.js";
-import { PAYMENTS_CHAT_ID, PAYPALS_PROFITS_CHAT_ID } from "../consts.js";
+import {
+  PAYMENTS_CHAT_ID,
+  REQUEST_PROFIT_EU_ID,
+  REQUEST_PROFIT_UKR_ID,
+} from "../consts.js";
 import { profitStatusButtons } from "./profitForm.js";
 import { extractValue } from "../helpers.js";
 
@@ -15,7 +19,12 @@ function updateProfitStatus(message, newStatus, id) {
 
 let paymentMessageInChat = null;
 
-export const setProfitStatus = async (status, message, nickname) => {
+export const setProfitStatus = async (
+  status,
+  message,
+  nickname,
+  profitChatId
+) => {
   try {
     const regexMsgId = /profit_message_id:\s*(\d+)/;
     const regexPaymentMsgId = /payment_message_id: \s*(\d+)/;
@@ -43,23 +52,39 @@ export const setProfitStatus = async (status, message, nickname) => {
       );
     }
 
-    await db
-      .collection("users")
-      .doc(nickname)
-      .get()
-      .then((doc) => {
-        const profits = doc.data().profits;
-
-        const profitToUpdate = profits.find(
-          (profit) => profit.id === profitId[1]
-        );
-        profitToUpdate.status = status;
-
-        return db
-          .collection("users")
-          .doc(nickname)
-          .update({ profits: profits });
+    if (status === "ИНСТАНТ!") {
+      profitMessages.push({
+        id: profitId[1],
+        amount: amount,
+        message_id: message.message_id,
       });
+    }
+
+    if (status === "ПЕРЕОФОРМИТЬ!") {
+      return await bot.editMessageReplyMarkup(
+        {
+          inline_keyboard: [
+            // [{ text: "Изменить фото", callback_data: "change_profit_photo" }],
+            [{ text: "Изменить сумму", callback_data: "change_profit_amount" }],
+            [{ text: "Изменить имя", callback_data: "change_profit_name" }],
+            [{ text: "Назад", callback_data: "back_to_profit_status" }],
+          ],
+        },
+        {
+          chat_id: profitChatId,
+          message_id: message.message_id,
+        }
+      );
+    }
+
+    const profitDoc = await db.collection("users").doc(nickname).get();
+
+    const profits = profitDoc.data().profits;
+
+    const profitToUpdate = profits.find((profit) => profit.id === profitId[1]);
+    profitToUpdate.status = status;
+
+    await db.collection("users").doc(nickname).update({ profits: profits });
 
     await bot.sendMessage(
       chatId[1],
@@ -87,9 +112,13 @@ export const setProfitStatus = async (status, message, nickname) => {
         )}`,
         {
           reply_markup: {
-            inline_keyboard: profitStatusButtons(),
+            // inline_keyboard: profitStatusButtons(),
+            inline_keyboard: [
+              [{ text: "Назад", callback_data: "back_to_profit_status" }],
+            ],
           },
-          chat_id: PAYPALS_PROFITS_CHAT_ID,
+          chat_id:
+            type === "UKR" ? REQUEST_PROFIT_UKR_ID : REQUEST_PROFIT_EU_ID,
           message_id: message.message_id,
           parse_mode: "HTML",
         }

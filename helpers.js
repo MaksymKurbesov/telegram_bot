@@ -1,5 +1,13 @@
 import { bot } from "./index.js";
-import { ITEMS_PER_PAGE } from "./consts.js";
+import {
+  ADMIN_PANEL_CHAT_ID,
+  ITEMS_PER_PAGE,
+  PAYMENTS_CHAT_ID,
+  REQUEST_PAYPAL_EU_ID,
+  REQUEST_PAYPAL_UKR_ID,
+  REQUEST_PROFIT_EU_ID,
+  REQUEST_PROFIT_UKR_ID,
+} from "./consts.js";
 import { db } from "./db.js";
 
 const generateUniqueID = () => {
@@ -81,6 +89,53 @@ const sendCurrentPage = async (chatId, messageId, page, items, type) => {
   }
 };
 
+const isChatWithoutCaptcha = (chatId) => {
+  const isAdminChat = chatId === Number(ADMIN_PANEL_CHAT_ID);
+  const isRequestProfitChat =
+    chatId === Number(REQUEST_PROFIT_EU_ID) ||
+    chatId === Number(REQUEST_PROFIT_UKR_ID);
+  const isRequestPaypalChat =
+    chatId === Number(REQUEST_PAYPAL_EU_ID) ||
+    chatId === Number(REQUEST_PAYPAL_UKR_ID);
+  const isPaymentChat = chatId === Number(PAYMENTS_CHAT_ID);
+
+  return (
+    isAdminChat || isRequestProfitChat || isRequestPaypalChat || isPaymentChat
+  );
+};
+
+const updateAmountById = (array, id, newAmount) => {
+  // Находим индекс объекта с нужным id
+  const index = array.findIndex((item) => item.id === id);
+
+  if (index !== -1) {
+    // Создаем новый объект с обновленным значением amount
+    const updatedItem = { ...array[index], amount: Number(newAmount) };
+
+    // Возвращаем новый массив с обновленным объектом
+    return [...array.slice(0, index), updatedItem, ...array.slice(index + 1)];
+  } else {
+    // Если объект с таким id не найден, возвращаем исходный массив
+    return array;
+  }
+};
+
+const updateNameById = (array, id, newName) => {
+  // Находим индекс объекта с нужным id
+  const index = array.findIndex((item) => item.id === id);
+
+  if (index !== -1) {
+    // Создаем новый объект с обновленным значением amount
+    const updatedItem = { ...array[index], name: newName };
+
+    // Возвращаем новый массив с обновленным объектом
+    return [...array.slice(0, index), updatedItem, ...array.slice(index + 1)];
+  } else {
+    // Если объект с таким id не найден, возвращаем исходный массив
+    return array;
+  }
+};
+
 const addUserFields = (chatId, nickname) => {
   return {
     chatId,
@@ -131,6 +186,11 @@ const generateNametag = (numberSet) => {
   return hash;
 };
 
+const isArrayOfEmails = (arr) => {
+  const emailRegex = /^[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,6}$/;
+  return Array.isArray(arr) && arr.every((email) => emailRegex.test(email));
+};
+
 const countEmailsByType = async () => {
   // Получение всех email'ов из коллекции
   const emailsRef = db.collection("emails");
@@ -159,4 +219,8 @@ export {
   sendCurrentPage,
   extractValue,
   countEmailsByType,
+  isArrayOfEmails,
+  isChatWithoutCaptcha,
+  updateAmountById,
+  updateNameById,
 };

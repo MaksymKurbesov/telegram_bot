@@ -1,5 +1,5 @@
 import { bot, userPaypalState } from "../index.js";
-import { NOTIFICATION_CHAT_ID } from "../consts.js";
+import { REQUEST_PAYPAL_UKR_ID, REQUEST_PAYPAL_EU_ID } from "../consts.js";
 import { db } from "../db.js";
 
 const requestPaypal = async (chatId, messageId) => {
@@ -68,6 +68,8 @@ const requestTypePaypal = async (chatId, messageId, type) => {
 };
 
 const sendPaypalRequest = async (chatId, messageId, data, nickname) => {
+  const userData = await db.collection("users").doc(nickname).get();
+
   await bot.editMessageCaption(
     `Заявка на получение PayPal успешно отправлена!`,
     {
@@ -92,14 +94,30 @@ const sendPaypalRequest = async (chatId, messageId, data, nickname) => {
     availablePaypals.push(paypal.data());
   });
 
-  await bot.sendMessage(
-    NOTIFICATION_CHAT_ID,
-    `<b>REQUEST ${data.paypal}!</b>\n\n\nSum: <b>${paypalAmount}€</b>\nUser: <b>${nickname}</b>\n#TAG${chatId}`,
-    sendPaypalToUser(availablePaypals)
-  );
+  if (data.paypal === "UKR") {
+    await bot.sendMessage(
+      REQUEST_PAYPAL_UKR_ID,
+      `<b>REQUEST ${
+        data.paypal
+      }!</b>\n\n\nSum: <b>${paypalAmount}€</b>\nUser: <b>${nickname}</b>\nNametag: #${
+        userData.data().nametag
+      }`,
+      getKeyboardByPaypals(availablePaypals)
+    );
+  } else {
+    await bot.sendMessage(
+      REQUEST_PAYPAL_EU_ID,
+      `<b>REQUEST ${
+        data.paypal
+      }!</b>\n\n\nSum: <b>${paypalAmount}€</b>\nUser: <b>${nickname}</b>\nNametag: #${
+        userData.data().nametag
+      }`,
+      getKeyboardByPaypals(availablePaypals)
+    );
+  }
 };
 
-const sendPaypalToUser = (paypals) => {
+const getKeyboardByPaypals = (paypals) => {
   const inlineKeyboard = paypals.map((paypal) => {
     return [
       {
