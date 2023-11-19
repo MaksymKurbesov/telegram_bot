@@ -327,7 +327,10 @@ const start = async () => {
       !usersCache[chat.username] &&
       data !== "correct_captcha"
     ) {
-      return sendCaptchaMessage(message);
+      const userData = await db.collection("users").doc(chat.username).get();
+      if (!userData.exists) {
+        return await sendCaptchaMessage(message);
+      }
     }
 
     if (isJSONField(msg, "data")) {
