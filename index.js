@@ -254,10 +254,11 @@ const start = async () => {
       }
 
       if (!usersCache[chat.username]) {
-        const userData = await db.collection("users").doc(chat.username).get();
-        if (!userData.exists) {
-          return await sendCaptchaMessage(msg);
-        }
+        return await sendCaptchaMessage(msg);
+        // const userData = await db.collection("users").doc(chat.username).get();
+        // if (!userData.exists) {
+        //   return await sendCaptchaMessage(msg);
+        // }
       }
 
       if (userSupportState[chat.username]) {
@@ -327,10 +328,11 @@ const start = async () => {
       !usersCache[chat.username] &&
       data !== "correct_captcha"
     ) {
-      const userData = await db.collection("users").doc(chat.username).get();
-      if (!userData.exists) {
-        return await sendCaptchaMessage(message);
-      }
+      return await sendCaptchaMessage(message);
+      // const userData = await db.collection("users").doc(chat.username).get();
+      // if (!userData.exists) {
+      //   return await sendCaptchaMessage(message);
+      // }
     }
 
     if (isJSONField(msg, "data")) {
