@@ -353,6 +353,7 @@ const start = async () => {
     }
 
     if (data === "cabinet") {
+      userSupportState[chat.username] = null;
       await getCabinetPage(chat.id, message_id, chat.username);
     }
 
