@@ -254,7 +254,10 @@ const start = async () => {
       }
 
       if (!usersCache[chat.username]) {
-        return await sendCaptchaMessage(msg);
+        const userData = await db.collection("users").doc(chat.username).get();
+        if (!userData.exists) {
+          return await sendCaptchaMessage(msg);
+        }
       }
 
       if (userSupportState[chat.username]) {

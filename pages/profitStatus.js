@@ -97,7 +97,7 @@ export const setProfitStatus = async (
         parse_mode: "HTML",
         reply_markup: {
           inline_keyboard: [
-            [{ text: "Закрыть", callback_data: "delete_message" }],
+            [{ text: "Закрыть ❌", callback_data: "delete_message" }],
           ],
         },
       }
