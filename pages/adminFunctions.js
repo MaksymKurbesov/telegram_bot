@@ -124,7 +124,9 @@ export const cardIn = async () => {
       .join("\n");
 
     const totalProfit = profitMessages.reduce((accum, val) => {
-      return accum + parseInt(val.amount);
+      if (typeof parseInt(val.amount) === "number") {
+        return accum + parseInt(val.amount);
+      }
     }, 0);
 
     await bot.sendMessage(
