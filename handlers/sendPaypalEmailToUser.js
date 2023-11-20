@@ -67,9 +67,9 @@ export const renewPaypalTime = async (chatId, email, nickname) => {
     if (renewPaypalUserState[chatId]) {
       setTimeout(async () => {
         await getBackPaypalToDatabase(email, chatId, nickname);
-      }, 5000);
+      }, 7200000);
     }
-  }, 5000);
+  }, 7200000);
 };
 
 const getBackPaypalToDatabase = async (paypal, chatId, nickname) => {

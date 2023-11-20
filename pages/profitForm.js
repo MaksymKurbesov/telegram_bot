@@ -275,26 +275,29 @@ export const profitFormStep4 = async (chatId, msg, wallet) => {
 
 export const profitStatusButtons = () => {
   return [
-    [{ text: "НА ПАЛКЕ!", callback_data: "profit-status-money_on_paypal" }],
-    [{ text: "ИНСТАНТ!", callback_data: "profit-status-instant" }],
     [
-      { text: "СТОП!", callback_data: "profit-status-stop" },
-      { text: "24ч", callback_data: "profit-status-24_hours" },
+      { text: "🟢 НА ПАЛКЕ!", callback_data: "profit-status-money_on_paypal" },
+      { text: "⚪️ ПУСТО!", callback_data: "profit-status-empty" },
+    ],
+    [{ text: " 🎉 ИНСТАНТ!", callback_data: "profit-status-instant" }],
+    [
+      { text: "⛔️ СТОП!", callback_data: "profit-status-stop" },
+      { text: "🕐 24ч", callback_data: "profit-status-24_hours" },
     ],
     [
-      { text: "ФРОД!", callback_data: "profit-status-fraud" },
-      { text: "ВЕРИФ!", callback_data: "profit-status-verification" },
+      { text: "💊 ФРОД!", callback_data: "profit-status-fraud" },
+      { text: "🔑 ВЕРИФ!", callback_data: "profit-status-verification" },
     ],
     [
-      { text: "ЛОК!", callback_data: "profit-status-lock" },
-      { text: "ДИСПУТ!", callback_data: "profit-status-dispute" },
+      { text: "❌   ЛОК!", callback_data: "profit-status-lock" },
+      { text: "✋ ДИСПУТ!", callback_data: "profit-status-dispute" },
     ],
     [
       {
-        text: "ПЕРЕОФОРМИТЬ!",
+        text: "✏ ПЕРЕОФОРМИТЬ!",
         callback_data: "profit-status-reissue",
       },
     ],
-    [{ text: "ВЫПЛАЧЕНО!", callback_data: "profit-status-paid" }],
+    [{ text: "✅ ВЫПЛАЧЕНО!", callback_data: "profit-status-paid" }],
   ];
 };

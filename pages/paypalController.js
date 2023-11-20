@@ -99,7 +99,7 @@ const sendPaypalRequest = async (chatId, messageId, data, nickname) => {
       REQUEST_PAYPAL_UKR_ID,
       `<b>REQUEST ${
         data.paypal
-      }!</b>\n\n\nSum: <b>${paypalAmount}€</b>\nUser: <b>${nickname}</b>\nNametag: #${
+      }!</b>\n\n\nSum: <b>${paypalAmount}€</b>\nUser: <b>${nickname}</b>\nNametag: ${
         userData.data().nametag
       }`,
       getKeyboardByPaypals(availablePaypals)
@@ -109,7 +109,7 @@ const sendPaypalRequest = async (chatId, messageId, data, nickname) => {
       REQUEST_PAYPAL_EU_ID,
       `<b>REQUEST ${
         data.paypal
-      }!</b>\n\n\nSum: <b>${paypalAmount}€</b>\nUser: <b>${nickname}</b>\nNametag: #${
+      }!</b>\n\n\nSum: <b>${paypalAmount}€</b>\nUser: <b>${nickname}</b>\nNametag: ${
         userData.data().nametag
       }`,
       getKeyboardByPaypals(availablePaypals)

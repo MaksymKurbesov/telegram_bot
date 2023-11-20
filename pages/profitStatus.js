@@ -4,8 +4,8 @@ import {
   PAYMENTS_CHAT_ID,
   REQUEST_PROFIT_EU_ID,
   REQUEST_PROFIT_UKR_ID,
+  STATUS_EMOJI_MAP,
 } from "../consts.js";
-import { profitStatusButtons } from "./profitForm.js";
 import { extractValue } from "../helpers.js";
 
 function updateProfitStatus(message, newStatus, id) {
@@ -46,7 +46,9 @@ export const setProfitStatus = async (
         {
           parse_mode: "HTML",
           reply_markup: {
-            inline_keyboard: [[{ text: "НА ПАЛКЕ!", callback_data: "status" }]],
+            inline_keyboard: [
+              [{ text: "🟢 НА ПАЛКЕ!", callback_data: "status" }],
+            ],
           },
         }
       );
@@ -57,6 +59,7 @@ export const setProfitStatus = async (
         id: profitId[1],
         amount: amount,
         message_id: message.message_id,
+        type: type,
       });
     }
 
@@ -103,27 +106,25 @@ export const setProfitStatus = async (
       }
     );
 
-    if (paymentMessageInChat) {
-      await bot.editMessageCaption(
-        `${updateProfitStatus(
-          message.caption,
-          status,
-          paymentMessageInChat.message_id
-        )}`,
-        {
-          reply_markup: {
-            // inline_keyboard: profitStatusButtons(),
-            inline_keyboard: [
-              [{ text: "Назад", callback_data: "back_to_profit_status" }],
-            ],
-          },
-          chat_id:
-            type === "UKR" ? REQUEST_PROFIT_UKR_ID : REQUEST_PROFIT_EU_ID,
-          message_id: message.message_id,
-          parse_mode: "HTML",
-        }
-      );
-    }
+    // if (paymentMessageInChat) {
+    await bot.editMessageCaption(
+      `${updateProfitStatus(
+        message.caption,
+        status,
+        paymentMessageInChat?.message_id
+      )}`,
+      {
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: "Назад", callback_data: "back_to_profit_status" }],
+          ],
+        },
+        chat_id: type === "UKR" ? REQUEST_PROFIT_UKR_ID : REQUEST_PROFIT_EU_ID,
+        message_id: message.message_id,
+        parse_mode: "HTML",
+      }
+    );
+    // }
 
     await bot.editMessageReplyMarkup(
       {
@@ -141,7 +142,12 @@ export const setProfitStatus = async (
       await bot.editMessageReplyMarkup(
         {
           inline_keyboard: [
-            [{ text: `${status}`, callback_data: "profit_status" }],
+            [
+              {
+                text: `${STATUS_EMOJI_MAP[status]} ${status}`,
+                callback_data: "profit_status",
+              },
+            ],
           ],
         },
         {

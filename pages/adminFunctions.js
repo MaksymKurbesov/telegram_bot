@@ -115,7 +115,9 @@ export const cardIn = async () => {
   try {
     const profitMessage = profitMessages
       .map((profit, index) => {
-        const link = `https://t.me/requestprofits/${profit.message_id}`;
+        const link = `https://t.me/c/${
+          profit.type === "UKR" ? "2017027841" : "1839867121"
+        }/${profit.message_id}`;
 
         return `${index + 1}. <a href='${link}'>#${profit.id}</a> | ${parseInt(
           profit.amount
@@ -124,9 +126,8 @@ export const cardIn = async () => {
       .join("\n");
 
     const totalProfit = profitMessages.reduce((accum, val) => {
-      if (typeof parseInt(val.amount) === "number") {
-        return accum + parseInt(val.amount);
-      }
+      const amount = parseFloat(val.amount);
+      return accum + (isNaN(amount) ? 0 : amount);
     }, 0);
 
     await bot.sendMessage(
