@@ -159,9 +159,14 @@ const start = async () => {
           const userDoc = await db.collection("users").doc(user);
           const userData = await userDoc.get();
 
-          const profitInCache = profitMessages.find(
-            (profit) => profit.id === profitId
-          );
+          console.log(profitId.split("#")[1], 'profitId.split("#")[1]');
+
+          const profitInCache = profitMessages.find((profit) => {
+            console.log(profit, "profit");
+            return profit.id === profitId.split("#")[1];
+          });
+
+          console.log(profitInCache, "profitInCache");
 
           if (editableProfit.type === "amount") {
             const updatedProfits = updateAmountById(
@@ -170,7 +175,9 @@ const start = async () => {
               text
             );
 
-            profitInCache.amount = text;
+            if (profitInCache) {
+              profitInCache.amount = text;
+            }
 
             await userDoc.update({
               profits: updatedProfits,
@@ -184,7 +191,9 @@ const start = async () => {
               text
             );
 
-            profitInCache.name = text;
+            if (profitInCache) {
+              profitInCache.name = text;
+            }
 
             await userDoc.update({
               profits: updatedProfits,
