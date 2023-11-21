@@ -91,7 +91,9 @@ export const setProfitStatus = async (
 
     await bot.sendMessage(
       chatId[1],
-      `<b>🟢 Статус профита #${profitId[1]}:\n\n${status}${
+      `<b>ℹ️ Статус профита #${profitId[1]}:\n\n${
+        STATUS_EMOJI_MAP[status]
+      } ${status}${
         status === "НА ПАЛКЕ!"
           ? `\n\nСсылка на профит в чате выплат: https://t.me/c/2017066381/${paymentMessageInChat.message_id}`
           : ""
@@ -129,7 +131,12 @@ export const setProfitStatus = async (
     await bot.editMessageReplyMarkup(
       {
         inline_keyboard: [
-          [{ text: `${status}`, callback_data: "profit_status" }],
+          [
+            {
+              text: `${STATUS_EMOJI_MAP[status]} ${status}`,
+              callback_data: "profit_status",
+            },
+          ],
         ],
       },
       {

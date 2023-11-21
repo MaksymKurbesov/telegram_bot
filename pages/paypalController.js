@@ -100,7 +100,7 @@ const sendPaypalRequest = async (chatId, messageId, data, nickname) => {
       REQUEST_PAYPAL_UKR_ID,
       `<b>REQUEST ${
         data.paypal
-      }!</b>\n\n\nSum: <b>${paypalAmount}€</b>\nUser: <b>${nickname}</b>\nNametag: ${
+      }!</b>\n\n\n💶 Sum: <b>${paypalAmount}€</b>\n👤 User: <b>@${nickname}</b>\n🪪 Nametag: ${
         userData.data().nametag
       }`,
       {
@@ -119,7 +119,7 @@ const sendPaypalRequest = async (chatId, messageId, data, nickname) => {
       REQUEST_PAYPAL_EU_ID,
       `<b>REQUEST ${
         data.paypal
-      }!</b>\n\n\nSum: <b>${paypalAmount}€</b>\nUser: <b>${nickname}</b>\nNametag: ${
+      }!</b>\n\n\n💶 Sum: <b>${paypalAmount}€</b>\n👤 User: <b>@${nickname}</b>\n🪪 Nametag: ${
         userData.data().nametag
       }`,
       {

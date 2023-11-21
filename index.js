@@ -54,6 +54,7 @@ import {
 } from "./pages/adminFunctions.js";
 import {
   ADMIN_PANEL_CHAT_ID,
+  ITEMS_PER_PAGE,
   REQUEST_PROFIT_EU_ID,
   REQUEST_PROFIT_UKR_ID,
   STATUS_MAP,
@@ -534,7 +535,7 @@ const start = async () => {
 
     if (data.startsWith("profit-status")) {
       const status = data.split("-")[2];
-      const parts = message.caption?.split("user: ");
+      const parts = message.caption?.split("user: @");
       const username = parts[1].split("\n")[0];
 
       await setProfitStatus(STATUS_MAP[status], message, username, chat.id);
@@ -564,16 +565,29 @@ const start = async () => {
         const type = data.split("_")[2];
         const action = data.split("_")[3];
         let currentPage = parseInt(data.split("_")[4]);
+        const emailsRef = await db.collection("emails");
+        const emailsCountSnap = await emailsRef
+          .where("type", "==", type)
+          .where("status", "==", "Свободен")
+          .count()
+          .get();
+        const emailsCount = emailsCountSnap.data().count;
+        const totalPage = Math.ceil(emailsCount / ITEMS_PER_PAGE);
 
         if (action === "next") {
           currentPage++;
+          if (currentPage >= totalPage) {
+            return;
+          }
         }
 
         if (action === "back") {
-          currentPage = currentPage > 0 ? currentPage - 1 : 0;
+          if (currentPage === 0) {
+            return;
+          } else {
+            currentPage = currentPage > 0 ? currentPage - 1 : 0;
+          }
         }
-
-        const emailsRef = await db.collection("emails");
 
         const emails = await emailsRef
           .where("type", "==", type)

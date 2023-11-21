@@ -3,9 +3,12 @@ import { FieldValue } from "firebase-admin/firestore";
 import { bot, renewPaypalUserState } from "../index.js";
 
 export const sendPaypalEmailToUser = async (message, parsedData, chatId) => {
-  const userNickname = message.text.match(/User:\s*(\w+)/)[1];
-  const paypalLimit = message.text.match(/Sum:\s*([\d+\-]+€)/)[1];
-  const updatedText = `${message.text}\n\nВыданная палка: ${parsedData.email}`;
+  console.log(message.text.match(/👤 User: @\s*(\w+)/), "userNickname");
+  const userNickname = message.text.match(/👤 User: @\s*(\w+)/)[1];
+  console.log(message.text.match(/💶 Sum:\s*([\d+\-]+€)/), "paypalLimit");
+  const paypalLimit = message.text.match(/💶 Sum:\s*([\d+\-]+€)/)[1];
+  const updatedText = `${message.text}\n\n📩 Выданная палка: ${parsedData.email}`;
+  console.log(message.text.match(/REQUEST\s+(.+)!/), "paypalType");
   const paypalType = message.text.match(/REQUEST\s+(.+)!/)[1];
   const userDoc = await db.collection("users").doc(userNickname);
   const userData = await userDoc.get();

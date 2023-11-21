@@ -222,7 +222,7 @@ const isArrayOfEmails = (arr) => {
 const countEmailsByType = async () => {
   // Получение всех email'ов из коллекции
   const emailsRef = db.collection("emails");
-  const snapshot = await emailsRef.get();
+  const snapshot = await emailsRef.where("status", "==", "Свободен").get();
 
   // Инициализация счетчиков для каждого типа
   let typeCounters = {};

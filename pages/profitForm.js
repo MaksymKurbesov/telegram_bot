@@ -19,7 +19,7 @@ const getRequestProfitMessageText = async (formData, wallet) => {
     userData.data().wallets[wallet]
   }</code></b>\n\n🟢 Текущий статус профита: Ожидание\n\n---------------------\nprofit_message_id: ${
     formData.message_id
-  }\nuser_chat_id: ${formData.chat_id}\nuser: ${formData.nickname}\nnametag: ${
+  }\nuser_chat_id: ${formData.chat_id}\nuser: @${formData.nickname}\nnametag: ${
     formData.nametag
   }\npayment_message_id: пусто`;
 };
