@@ -1,6 +1,7 @@
 import { bot, userPaypalState } from "../index.js";
 import { REQUEST_PAYPAL_UKR_ID, REQUEST_PAYPAL_EU_ID } from "../consts.js";
 import { db } from "../db.js";
+import { getEmailButtons } from "../helpers.js";
 
 const requestPaypal = async (chatId, messageId) => {
   userPaypalState[chatId] = {
@@ -90,7 +91,7 @@ const sendPaypalRequest = async (chatId, messageId, data, nickname) => {
 
   const availablePaypals = [];
 
-  availablePaypalsSnap.docs.forEach((paypal) => {
+  await availablePaypalsSnap.docs.forEach((paypal) => {
     availablePaypals.push(paypal.data());
   });
 
@@ -102,9 +103,18 @@ const sendPaypalRequest = async (chatId, messageId, data, nickname) => {
       }!</b>\n\n\nSum: <b>${paypalAmount}€</b>\nUser: <b>${nickname}</b>\nNametag: ${
         userData.data().nametag
       }`,
-      getKeyboardByPaypals(availablePaypals)
+      {
+        reply_markup: {
+          inline_keyboard: getEmailButtons(availablePaypals, 0, data.paypal),
+        },
+        parse_mode: "HTML",
+      }
+
+      // getKeyboardByPaypals(availablePaypals)
     );
-  } else {
+  }
+
+  if (data.paypal === "F/F") {
     await bot.sendMessage(
       REQUEST_PAYPAL_EU_ID,
       `<b>REQUEST ${
@@ -112,7 +122,14 @@ const sendPaypalRequest = async (chatId, messageId, data, nickname) => {
       }!</b>\n\n\nSum: <b>${paypalAmount}€</b>\nUser: <b>${nickname}</b>\nNametag: ${
         userData.data().nametag
       }`,
-      getKeyboardByPaypals(availablePaypals)
+      {
+        reply_markup: {
+          inline_keyboard: getEmailButtons(availablePaypals, 0, data.paypal),
+        },
+        parse_mode: "HTML",
+      }
+
+      // getKeyboardByPaypals(availablePaypals)
     );
   }
 };
@@ -134,6 +151,8 @@ const getKeyboardByPaypals = (paypals) => {
     reply_markup: {
       inline_keyboard: [
         ...inlineKeyboard,
+        [{ text: "⬅️", callback_data: "emails_page_back" }],
+        [{ text: "➡️", callback_data: "emails_page_next" }],
         [
           {
             text: "Отмена",

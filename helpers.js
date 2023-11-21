@@ -89,6 +89,34 @@ const sendCurrentPage = async (chatId, messageId, page, items, type) => {
   }
 };
 
+const getEmailButtons = (emails, currentPage, type) => {
+  let buttons = [];
+  let pageEmails = emails.slice(
+    currentPage * ITEMS_PER_PAGE,
+    (currentPage + 1) * ITEMS_PER_PAGE
+  );
+
+  pageEmails.forEach((email) => {
+    buttons.push([
+      {
+        text: email.email,
+        callback_data: JSON.stringify({
+          action: "email_selected",
+          email: email.email,
+        }),
+      },
+    ]);
+  });
+
+  // Добавляем кнопки управления страницами
+  buttons.push([
+    { text: "<<", callback_data: `emails_page_${type}_back_${currentPage}` },
+    { text: ">>", callback_data: `emails_page_${type}_next_${currentPage}` },
+  ]);
+
+  return buttons;
+};
+
 const isChatWithoutCaptcha = (chatId) => {
   const isAdminChat = chatId === Number(ADMIN_PANEL_CHAT_ID);
   const isRequestProfitChat =
@@ -223,4 +251,5 @@ export {
   isChatWithoutCaptcha,
   updateAmountById,
   updateNameById,
+  getEmailButtons,
 };

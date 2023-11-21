@@ -5,6 +5,7 @@ process.env["NTBA_FIX_350"] = 1;
 import TelegramBot from "node-telegram-bot-api";
 import { checkAntiFloodStatus } from "./floodSystem.js";
 import {
+  getEmailButtons,
   isArrayOfEmails,
   isChatWithoutCaptcha,
   isJSONField,
@@ -556,6 +557,46 @@ const start = async () => {
         userData.data().profits,
         type
       );
+    }
+
+    if (data.startsWith("emails_page") || data.startsWith("emails_page")) {
+      try {
+        const type = data.split("_")[2];
+        const action = data.split("_")[3];
+        let currentPage = parseInt(data.split("_")[4]);
+
+        if (action === "next") {
+          currentPage++;
+        }
+
+        if (action === "back") {
+          currentPage = currentPage > 0 ? currentPage - 1 : 0;
+        }
+
+        const emailsRef = await db.collection("emails");
+
+        const emails = await emailsRef
+          .where("type", "==", type)
+          .where("status", "==", "Свободен")
+          .get();
+
+        const emailsData = emails.docs.map((email) => {
+          return email.data();
+        });
+
+        const buttons = getEmailButtons(emailsData, currentPage, type);
+
+        await bot.editMessageReplyMarkup(
+          { inline_keyboard: buttons },
+
+          {
+            chat_id: chat.id,
+            message_id: message_id,
+          }
+        );
+      } catch (e) {
+        console.log(e, "startswith emails page");
+      }
     }
 
     if (data === "request_profit") {
