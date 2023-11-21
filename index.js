@@ -147,7 +147,7 @@ const start = async () => {
         if (editableProfit.type === "photo") {
           console.log("photo");
         } else {
-          const userParts = editableProfit.message_caption.split("user: ");
+          const userParts = editableProfit.message_caption.split("user: @");
           const userAndRest = userParts[1];
           const user = userAndRest.split("\n")[0];
 
@@ -159,12 +159,18 @@ const start = async () => {
           const userDoc = await db.collection("users").doc(user);
           const userData = await userDoc.get();
 
+          const profitInCache = profitMessages.find(
+            (profit) => profit.id === profitId
+          );
+
           if (editableProfit.type === "amount") {
             const updatedProfits = updateAmountById(
               userData.data().profits,
               profitId.split("#")[1],
               text
             );
+
+            profitInCache.amount = text;
 
             await userDoc.update({
               profits: updatedProfits,
@@ -177,6 +183,8 @@ const start = async () => {
               profitId.split("#")[1],
               text
             );
+
+            profitInCache.name = text;
 
             await userDoc.update({
               profits: updatedProfits,
@@ -266,7 +274,7 @@ const start = async () => {
       if (userSupportState[chat.username]) {
         await bot.sendMessage(
           ADMIN_PANEL_CHAT_ID,
-          `<b>🆘 SUPPORT MESSAGE!</b>\n\nПользователь: <b>${chat.username}</b>\nВопрос: <b>${text}</b>`,
+          `<b>🆘 SUPPORT MESSAGE!</b>\n\nПользователь: <b>@${chat.username}</b>\nВопрос: <b>${text}</b>`,
           {
             parse_mode: "HTML",
           }
