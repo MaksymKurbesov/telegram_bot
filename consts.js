@@ -1,4 +1,4 @@
-const MAIN_IMAGE = "./image/main.jpg";
+const MAIN_IMAGE = "./image/main.png";
 const BOT_CHAT_ID = "6359435376";
 
 const PAYMENTS_CHAT_ID = "-1002017066381";
