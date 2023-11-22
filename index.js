@@ -5,12 +5,14 @@ process.env["NTBA_FIX_350"] = 1;
 import TelegramBot from "node-telegram-bot-api";
 import { checkAntiFloodStatus } from "./floodSystem.js";
 import {
+  extractValue,
   getEmailButtons,
   isArrayOfEmails,
   isChatWithoutCaptcha,
   isJSONField,
   sendCurrentPage,
   updateAmountById,
+  updateAmountInPaymentsChat,
   updateNameById,
 } from "./helpers.js";
 
@@ -29,7 +31,7 @@ import {
   requestProfitAmount,
   requestProfitBill,
 } from "./pages/profitForm.js";
-import { setProfitStatus } from "./pages/profitStatus.js";
+import { paymentMessageInChat, setProfitStatus } from "./pages/profitStatus.js";
 import {
   changePaymentDetails,
   getPaymentDetails,
@@ -55,8 +57,10 @@ import {
 import {
   ADMIN_PANEL_CHAT_ID,
   ITEMS_PER_PAGE,
+  PAYMENTS_CHAT_ID,
   REQUEST_PROFIT_EU_ID,
   REQUEST_PROFIT_UKR_ID,
+  STATUS_EMOJI_MAP,
   STATUS_MAP,
 } from "./consts.js";
 import { captchaLion } from "./handlers/captchaLion.js";
@@ -92,6 +96,8 @@ export let WORK_STATUS = false;
 let editableProfit = {
   message_id: null,
   chat_id: null,
+  payment_message_id: null,
+  payment_chat_id: null,
 };
 
 const start = async () => {
@@ -159,14 +165,10 @@ const start = async () => {
           const userDoc = await db.collection("users").doc(user);
           const userData = await userDoc.get();
 
-          console.log(profitId.split("#")[1], 'profitId.split("#")[1]');
-
           const profitInCache = profitMessages.find((profit) => {
             console.log(profit, "profit");
             return profit.id === profitId.split("#")[1];
           });
-
-          console.log(profitInCache, "profitInCache");
 
           if (editableProfit.type === "amount") {
             const updatedProfits = updateAmountById(
@@ -198,6 +200,35 @@ const start = async () => {
             await userDoc.update({
               profits: updatedProfits,
             });
+          }
+
+          if (editableProfit.payment_message_id) {
+            console.log("work");
+
+            await bot.editMessageText(
+              updateAmountInPaymentsChat(
+                editableProfit.paypalType,
+                editableProfit.nametag,
+                text
+              ),
+              {
+                message_id: editableProfit.payment_message_id,
+                chat_id: PAYMENTS_CHAT_ID,
+                reply_markup: {
+                  inline_keyboard: [
+                    [
+                      {
+                        text: `${STATUS_EMOJI_MAP[editableProfit.status]} ${
+                          editableProfit.status
+                        }`,
+                        callback_data: "profit_status",
+                      },
+                    ],
+                  ],
+                },
+                parse_mode: "HTML",
+              }
+            );
           }
 
           await bot.editMessageCaption(
@@ -500,12 +531,22 @@ const start = async () => {
     if (data.startsWith("change_profit")) {
       const changeProfitType = data.split("_")[2];
       const regexProfitId = /Профит ID: #(.+)/;
+      const regexPaymentMsgId = /payment_message_id: \s*(\d+)/;
+      const type = extractValue(message.caption, "Тип: ");
+      const nametag = extractValue(message.caption, "nametag: ");
+      const status = extractValue(message.caption, "Текущий статус профита: ");
+
       const profitId = message.caption.match(regexProfitId);
+      const paymentMsgId = message.caption.match(regexPaymentMsgId);
 
       editableProfit.message_id = message_id;
       editableProfit.chat_id = chat.id;
       editableProfit.message_caption = message.caption;
       editableProfit.type = changeProfitType;
+      editableProfit.paypalType = type;
+      editableProfit.payment_message_id = paymentMsgId[1];
+      editableProfit.nametag = nametag;
+      editableProfit.status = status;
 
       if (changeProfitType === "amount") {
         await bot.sendMessage(

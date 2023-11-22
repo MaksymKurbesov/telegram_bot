@@ -240,6 +240,10 @@ const countEmailsByType = async () => {
   return typeCounters;
 };
 
+const updateAmountInPaymentsChat = (type, user, amount) => {
+  return `<b>Paypal:</b> ${type}\n<b>Пользователь:</b> ${user}\n<b>Сумма:</b> ${amount}€`;
+};
+
 export {
   addUserFields,
   isJSONField,
@@ -252,4 +256,5 @@ export {
   updateAmountById,
   updateNameById,
   getEmailButtons,
+  updateAmountInPaymentsChat,
 };

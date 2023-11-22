@@ -17,7 +17,7 @@ function updateProfitStatus(message, newStatus, id) {
   );
 }
 
-let paymentMessageInChat = null;
+export let paymentMessageInChat = null;
 
 export const setProfitStatus = async (
   status,
