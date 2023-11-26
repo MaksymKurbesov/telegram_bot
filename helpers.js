@@ -2,6 +2,7 @@ import { bot } from "./index.js";
 import {
   ADMIN_PANEL_CHAT_ID,
   ITEMS_PER_PAGE,
+  PAPA_BOT_CHAT_ID,
   PAYMENTS_CHAT_ID,
   REQUEST_PAYPAL_EU_ID,
   REQUEST_PAYPAL_UKR_ID,
@@ -118,6 +119,7 @@ const getEmailButtons = (emails, currentPage, type) => {
 };
 
 const isChatWithoutCaptcha = (chatId) => {
+  const isTalkChat = chatId === Number(PAPA_BOT_CHAT_ID);
   const isAdminChat = chatId === Number(ADMIN_PANEL_CHAT_ID);
   const isRequestProfitChat =
     chatId === Number(REQUEST_PROFIT_EU_ID) ||
@@ -128,7 +130,11 @@ const isChatWithoutCaptcha = (chatId) => {
   const isPaymentChat = chatId === Number(PAYMENTS_CHAT_ID);
 
   return (
-    isAdminChat || isRequestProfitChat || isRequestPaypalChat || isPaymentChat
+    isAdminChat ||
+    isRequestProfitChat ||
+    isRequestPaypalChat ||
+    isPaymentChat ||
+    isTalkChat
   );
 };
 
@@ -241,7 +247,9 @@ const countEmailsByType = async () => {
 };
 
 const updateAmountInPaymentsChat = (type, user, amount) => {
-  return `<b>Paypal:</b> ${type}\n<b>Пользователь:</b> ${user}\n<b>Сумма:</b> ${amount}€`;
+  return `${
+    type === "UKR" ? "🇺🇦" : "🇪🇺"
+  } Paypal: <b>${type}</b>\n👤 Пользователь: <b>${user}</b>\n💶 Сумма: <b>${amount}€</b>`;
 };
 
 export {

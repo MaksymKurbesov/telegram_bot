@@ -42,7 +42,9 @@ export const setProfitStatus = async (
     if (status === "НА ПАЛКЕ!") {
       paymentMessageInChat = await bot.sendMessage(
         PAYMENTS_CHAT_ID,
-        `<b>Paypal:</b> ${type}\n<b>Пользователь:</b> ${nametag}\n<b>Сумма:</b> ${amount}`,
+        `${
+          type === "UKR" ? "🇺🇦" : "🇪🇺"
+        } Paypal: <b>${type}</b>\n👤 Пользователь: <b>${nametag}</b>\n💶 Сумма: <b>${amount}</b>`,
         {
           parse_mode: "HTML",
           reply_markup: {

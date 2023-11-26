@@ -10,7 +10,7 @@ const requestPaypal = async (chatId, messageId) => {
   };
 
   await bot.editMessageCaption(
-    `<b>🅿️ ПАЛКИ!</b>\n\n<b>PayPal UKR!</b>\nВаш процент: <b>60%</b>\n\n<b>PayPal EU F/F!</b>\nВаш процент: <b>60%</b>`,
+    `<b>🅿️ ПАЛКИ!</b>\n\n<b>PayPal UKR!</b>\nВаш процент: <b>70%</b>\n\n<b>PayPal EU F/F!</b>\nВаш процент: <b>70%</b>`,
     {
       chat_id: chatId,
       message_id: messageId,

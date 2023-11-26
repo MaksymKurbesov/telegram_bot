@@ -99,7 +99,7 @@ export const sendMessageToAllUser = async (message) => {
   const usersChatId = Object.values(usersCache).map((user) => user.chatId);
   usersChatId.forEach((chatId) => {
     bot
-      .sendMessage(chatId, message, {
+      .sendMessage(chatId, `<b>${message}</b>`, {
         parse_mode: "HTML",
       })
       .catch((error) => {

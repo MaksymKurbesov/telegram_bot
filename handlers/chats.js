@@ -8,6 +8,7 @@ export const getChats = async (chatId, messageId) => {
     reply_markup: {
       inline_keyboard: [
         [{ text: "Выплаты 💸", url: "https://t.me/paymentnotifications" }],
+        [{ text: "Общение 🗣", callback_data: "get_chat_invite_link" }],
         [{ text: "Назад", callback_data: "cabinet" }],
       ],
     },

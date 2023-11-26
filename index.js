@@ -57,6 +57,7 @@ import {
 import {
   ADMIN_PANEL_CHAT_ID,
   ITEMS_PER_PAGE,
+  PAPA_BOT_CHAT_ID,
   PAYMENTS_CHAT_ID,
   REQUEST_PROFIT_EU_ID,
   REQUEST_PROFIT_UKR_ID,
@@ -114,154 +115,134 @@ const start = async () => {
       const chatId = chat.id;
       const isAdminChat = chatId === Number(ADMIN_PANEL_CHAT_ID);
 
+      console.log(msg.new_chat_members, "msg.new_chat_members");
+
       if (isAdminChat && text?.startsWith("/all")) {
         const parts = text.split("/all");
         const message = parts[1].trim();
         return await sendMessageToAllUser(message);
       }
 
-      if (
-        editableProfit.type === "amount" ||
-        editableProfit.type === "name" ||
-        editableProfit.type === "photo"
-      ) {
-        const updatedAmountCaption = editableProfit.message_caption.replace(
-          /(Сумма:\s*)[^\n]+/,
-          "$1" + `${text}€`
-        );
-
-        const updatedNameCaption = editableProfit.message_caption.replace(
-          /(Имя:\s*)[^\n]+/,
-          "$1" + `${text}`
-        );
-
+      if (editableProfit.type === "amount" || editableProfit.type === "name") {
         const updatedObjects = {
           amount: {
-            caption: updatedAmountCaption,
             message: `🟢 Сумма профита успешно изменена!`,
           },
           name: {
-            caption: updatedNameCaption,
             message: `🟢 Имя профита успешно изменено!`,
-          },
-          photo: {
-            caption: editableProfit.message_caption,
-            message: `🟢 Фото профита успешно изменено!`,
           },
         };
 
-        if (editableProfit.type === "photo") {
-          console.log("photo");
-        } else {
-          const userParts = editableProfit.message_caption.split("user: @");
-          const userAndRest = userParts[1];
-          const user = userAndRest.split("\n")[0];
+        const userParts = editableProfit.message_caption.split("user: @");
+        const userAndRest = userParts[1];
+        const user = userAndRest.split("\n")[0];
 
-          const profitIdParts =
-            editableProfit.message_caption.split("Профит ID: ");
-          const profitIdAndRest = profitIdParts[1];
-          const profitId = profitIdAndRest.split("\n")[0];
+        const profitIdParts =
+          editableProfit.message_caption.split("Профит ID: ");
+        const profitIdAndRest = profitIdParts[1];
+        const profitId = profitIdAndRest.split("\n")[0];
 
-          const userDoc = await db.collection("users").doc(user);
-          const userData = await userDoc.get();
+        const userDoc = await db.collection("users").doc(user);
+        const userData = await userDoc.get();
+        let updatedCaption;
 
-          const profitInCache = profitMessages.find((profit) => {
-            console.log(profit, "profit");
-            return profit.id === profitId.split("#")[1];
+        const profitInCache = profitMessages.find((profit) => {
+          return profit.id === profitId.split("#")[1];
+        });
+
+        if (editableProfit.type === "amount") {
+          const updatedProfits = updateAmountById(
+            userData.data().profits,
+            profitId.split("#")[1],
+            text
+          );
+
+          updatedCaption = editableProfit.message_caption.replace(
+            /(Сумма:\s*)[^\n]+/,
+            "$1" + `${text}€`
+          );
+
+          if (profitInCache) {
+            profitInCache.amount = text;
+          }
+
+          await userDoc.update({
+            profits: updatedProfits,
           });
+        }
 
-          if (editableProfit.type === "amount") {
-            const updatedProfits = updateAmountById(
-              userData.data().profits,
-              profitId.split("#")[1],
+        if (editableProfit.type === "name") {
+          const updatedProfits = updateNameById(
+            userData.data().profits,
+            profitId.split("#")[1],
+            text
+          );
+
+          updatedCaption = editableProfit.message_caption.replace(
+            /(Имя:\s*)[^\n]+/,
+            "$1" + `${text}`
+          );
+
+          if (profitInCache) {
+            profitInCache.name = text;
+          }
+
+          await userDoc.update({
+            profits: updatedProfits,
+          });
+        }
+
+        if (
+          editableProfit.payment_message_id &&
+          editableProfit.type === "amount"
+        ) {
+          await bot.editMessageText(
+            updateAmountInPaymentsChat(
+              editableProfit.paypalType,
+              editableProfit.nametag,
               text
-            );
-
-            if (profitInCache) {
-              profitInCache.amount = text;
-            }
-
-            await userDoc.update({
-              profits: updatedProfits,
-            });
-          }
-
-          if (editableProfit.type === "name") {
-            const updatedProfits = updateNameById(
-              userData.data().profits,
-              profitId.split("#")[1],
-              text
-            );
-
-            if (profitInCache) {
-              profitInCache.name = text;
-            }
-
-            await userDoc.update({
-              profits: updatedProfits,
-            });
-          }
-
-          if (editableProfit.payment_message_id) {
-            console.log("work");
-
-            await bot.editMessageText(
-              updateAmountInPaymentsChat(
-                editableProfit.paypalType,
-                editableProfit.nametag,
-                text
-              ),
-              {
-                message_id: editableProfit.payment_message_id,
-                chat_id: PAYMENTS_CHAT_ID,
-                reply_markup: {
-                  inline_keyboard: [
-                    [
-                      {
-                        text: `${STATUS_EMOJI_MAP[editableProfit.status]} ${
-                          editableProfit.status
-                        }`,
-                        callback_data: "profit_status",
-                      },
-                    ],
-                  ],
-                },
-                parse_mode: "HTML",
-              }
-            );
-          }
-
-          await bot.editMessageCaption(
-            updatedObjects[editableProfit.type].caption,
+            ),
             {
-              chat_id: editableProfit.chat_id,
-              message_id: editableProfit.message_id,
+              message_id: editableProfit.payment_message_id,
+              chat_id: PAYMENTS_CHAT_ID,
               reply_markup: {
                 inline_keyboard: [
-                  // [
-                  //   {
-                  //     text: "Изменить фото",
-                  //     callback_data: "change_profit_photo",
-                  //   },
-                  // ],
                   [
                     {
-                      text: "Изменить сумму",
-                      callback_data: "change_profit_amount",
+                      text: `${STATUS_EMOJI_MAP[editableProfit.status]} ${
+                        editableProfit.status
+                      }`,
+                      callback_data: "profit_status",
                     },
                   ],
-                  [
-                    {
-                      text: "Изменить имя",
-                      callback_data: "change_profit_name",
-                    },
-                  ],
-                  [{ text: "Назад", callback_data: "back_to_profit_status" }],
                 ],
               },
+              parse_mode: "HTML",
             }
           );
         }
+
+        await bot.editMessageCaption(updatedCaption, {
+          chat_id: editableProfit.chat_id,
+          message_id: editableProfit.message_id,
+          reply_markup: {
+            inline_keyboard: [
+              [
+                {
+                  text: "Изменить сумму",
+                  callback_data: "change_profit_amount",
+                },
+              ],
+              [
+                {
+                  text: "Изменить имя",
+                  callback_data: "change_profit_name",
+                },
+              ],
+              [{ text: "Назад", callback_data: "back_to_profit_status" }],
+            ],
+          },
+        });
 
         await bot.sendMessage(
           chatId,
@@ -439,6 +420,29 @@ const start = async () => {
       }
     }
 
+    if (data === "get_chat_invite_link") {
+      if (usersCache[chat.username].linkIsGenerated) {
+        return await bot.sendMessage(
+          chat.id,
+          `<b>🔴 Вы уже получили ссылку на чат.</b>`,
+          {
+            parse_mode: "HTML",
+          }
+        );
+      }
+
+      const inviteLink = await bot.createChatInviteLink(PAPA_BOT_CHAT_ID, {
+        member_limit: 1,
+      });
+
+      usersCache[chat.username].linkIsGenerated = true;
+
+      await bot.sendMessage(
+        chat.id,
+        `Ссылка на чат: ${inviteLink.invite_link}`
+      );
+    }
+
     if (data === "change_nametag") {
       try {
         await changeNameTag(chat.id, message_id);
@@ -562,16 +566,6 @@ const start = async () => {
         await bot.sendMessage(
           chat.id,
           `<b>ℹ️ Укажите новое имя для профита #${profitId[1]}!</b>`,
-          {
-            parse_mode: "HTML",
-          }
-        );
-      }
-
-      if (changeProfitType === "photo") {
-        await bot.sendMessage(
-          chat.id,
-          `<b>ℹ️ Отправьте новое фото для профита #${profitId[1]}!</b>`,
           {
             parse_mode: "HTML",
           }
