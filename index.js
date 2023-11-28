@@ -587,6 +587,34 @@ const start = async () => {
 
     if (data.startsWith("profit-status")) {
       const status = data.split("-")[2];
+
+      await bot.editMessageReplyMarkup(
+        {
+          inline_keyboard: [
+            [
+              {
+                text: `${STATUS_EMOJI_MAP[STATUS_MAP[status]]} ${
+                  STATUS_MAP[status]
+                }`,
+                callback_data: `confirm-status-${status}`,
+              },
+              {
+                text: "Отмена",
+                callback_data: "back_to_profit_status",
+              },
+            ],
+          ],
+        },
+        {
+          chat_id: chat.id,
+          message_id: message_id,
+        }
+      );
+    }
+
+    if (data.startsWith("confirm-status")) {
+      const status = data.split("-")[2];
+      console.log(status, "status");
       const parts = message.caption?.split("user: @");
       const username = parts[1].split("\n")[0];
 

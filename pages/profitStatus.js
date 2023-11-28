@@ -26,6 +26,8 @@ export const setProfitStatus = async (
   profitChatId
 ) => {
   try {
+    console.log("set profit status");
+
     const regexMsgId = /profit_message_id:\s*(\d+)/;
     const regexPaymentMsgId = /payment_message_id: \s*(\d+)/;
     const regexChatId = /user_chat_id:\s*(\d+)/;
