@@ -493,11 +493,9 @@ const start = async () => {
           userPaypalState[chat.id],
           chat.username
         );
-        ////////////////////////// UNCOMENNT!!!!! //////////////////////////
 
-        // usersPaypalTimeout[chat.id] = true;
+        usersPaypalTimeout[chat.id] = true;
 
-        ////////////////////////// UNCOMENNT!!!!! //////////////////////////
         setTimeout(() => {
           usersPaypalTimeout[chat.id] = false;
         }, 60000);
