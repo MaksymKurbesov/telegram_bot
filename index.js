@@ -31,7 +31,7 @@ import {
   requestProfitAmount,
   requestProfitBill,
 } from "./pages/profitForm.js";
-import { paymentMessageInChat, setProfitStatus } from "./pages/profitStatus.js";
+import { setProfitStatus } from "./pages/profitStatus.js";
 import {
   changePaymentDetails,
   getPaymentDetails,
@@ -59,14 +59,13 @@ import {
   ITEMS_PER_PAGE,
   PAPA_BOT_CHAT_ID,
   PAYMENTS_CHAT_ID,
-  REQUEST_PROFIT_EU_ID,
-  REQUEST_PROFIT_UKR_ID,
   STATUS_EMOJI_MAP,
   STATUS_MAP,
 } from "./consts.js";
 import { captchaLion } from "./handlers/captchaLion.js";
 import {
-  renewPaypalTime,
+  getBackPaypalToDatabase,
+  renewPaypalValidity,
   sendPaypalEmailToUser,
 } from "./handlers/sendPaypalEmailToUser.js";
 import { getUserProfitsType } from "./handlers/getUserProfitsType.js";
@@ -87,7 +86,9 @@ export const userChangeWalletState = {};
 export const userPaypalState = {};
 export const userChangeNametagState = {};
 export const userPagination = {};
-export const renewPaypalUserState = {};
+export const renewPaypalUserState = {
+  chat_id: ["test@gmail.com"],
+};
 export let profitMessages = [];
 const usersPaypalTimeout = {};
 export const userSupportState = {};
@@ -114,8 +115,6 @@ const start = async () => {
       const { text, chat, photo } = msg;
       const chatId = chat.id;
       const isAdminChat = chatId === Number(ADMIN_PANEL_CHAT_ID);
-
-      console.log(msg.new_chat_members, "msg.new_chat_members");
 
       if (isAdminChat && text?.startsWith("/all")) {
         const parts = text.split("/all");
@@ -360,10 +359,6 @@ const start = async () => {
       data !== "correct_captcha"
     ) {
       return await sendCaptchaMessage(message);
-      // const userData = await db.collection("users").doc(chat.username).get();
-      // if (!userData.exists) {
-      //   return await sendCaptchaMessage(message);
-      // }
     }
 
     if (isJSONField(msg, "data")) {
@@ -387,8 +382,26 @@ const start = async () => {
     }
 
     if (data === "restart_card_in") {
+      await bot.editMessageReplyMarkup(
+        {
+          inline_keyboard: [
+            [
+              { text: "Выплачено! 💸", callback_data: "confirm_card_in" },
+              { text: "Отмена 🔴", callback_data: "admin_panel" },
+            ],
+          ],
+        },
+        {
+          chat_id: chat.id,
+          message_id: message_id,
+        }
+      );
+    }
+
+    if (data === "confirm_card_in") {
       profitMessages = [];
       await bot.sendMessage(chat.id, "Выплаты сделаны! 👌");
+      await getAdminPanel(chat.id, message_id, WORK_STATUS);
     }
 
     if (data === "cabinet") {
@@ -480,7 +493,11 @@ const start = async () => {
           userPaypalState[chat.id],
           chat.username
         );
-        usersPaypalTimeout[chat.id] = true;
+        ////////////////////////// UNCOMENNT!!!!! //////////////////////////
+
+        // usersPaypalTimeout[chat.id] = true;
+
+        ////////////////////////// UNCOMENNT!!!!! //////////////////////////
         setTimeout(() => {
           usersPaypalTimeout[chat.id] = false;
         }, 60000);
@@ -743,17 +760,24 @@ const start = async () => {
     }
 
     if (data === "renew_paypal") {
-      if (!renewPaypalUserState[chat.id]) {
-        return;
-      }
-
-      renewPaypalUserState[chat.id] = false;
-
       const emailRegex = /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/;
-      const matches = message.text.match(emailRegex);
+      const email = message.text.match(emailRegex);
+      const userState = renewPaypalUserState[chat.id];
 
-      if (matches) {
-        await renewPaypalTime(chat.id, matches[0], msg.from.username);
+      if (email && userState) {
+        const userPaypalIndex = userState.findIndex(
+          (obj) => obj["email"] === email[0]
+        );
+        userState[userPaypalIndex] = {
+          ...userState[userPaypalIndex],
+          emailKept: true,
+        };
+
+        renewPaypalValidity(
+          chat.id,
+          email[0],
+          renewPaypalUserState[chat.id][0].nickname
+        );
 
         await bot.editMessageReplyMarkup(
           {
@@ -770,12 +794,13 @@ const start = async () => {
     }
 
     if (data === "refuse_renew_paypal") {
-      renewPaypalUserState[chat.id] = false;
-
       const emailRegex = /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/;
       const matches = message.text.match(emailRegex);
 
       if (matches) {
+        // const paypalIndex = renewPaypalUserState[chat.id]?.indexOf(matches[0]);
+        // renewPaypalUserState[chat.id].splice(paypalIndex, 1);
+
         await db.collection("emails").doc(matches[0]).update({
           status: "Свободен",
         });
@@ -823,7 +848,7 @@ const start = async () => {
 
     if (parsedData?.action === "email_selected") {
       try {
-        await sendPaypalEmailToUser(message, parsedData, chat.id);
+        await sendPaypalEmailToUser(msg, parsedData, chat.id);
       } catch (e) {
         console.log(e, 'parsedData?.action === "email_selected"');
       }

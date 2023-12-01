@@ -1,4 +1,4 @@
-import { bot, userProfitFormStates } from "../index.js";
+import { bot, renewPaypalUserState, userProfitFormStates } from "../index.js";
 import { generateUniqueID } from "../helpers.js";
 import { REQUEST_PROFIT_EU_ID, REQUEST_PROFIT_UKR_ID } from "../consts.js";
 import { db } from "../db.js";
@@ -267,6 +267,16 @@ export const profitFormStep4 = async (chatId, msg, wallet) => {
       }),
       paypals: newPaypals,
     });
+
+    const userPaypalIndex = renewPaypalUserState[chatId]?.findIndex(
+      (obj) => obj["email"] === formData.paypal
+    );
+
+    renewPaypalUserState[chatId][userPaypalIndex] = {
+      ...renewPaypalUserState[chatId][userPaypalIndex],
+      emailProfited: true,
+    };
+
     delete userProfitFormStates[chatId];
   } catch (e) {
     console.log(e, "profitFormStep3");

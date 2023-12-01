@@ -2,51 +2,80 @@ import { db } from "../db.js";
 import { FieldValue } from "firebase-admin/firestore";
 import { bot, renewPaypalUserState } from "../index.js";
 
-export const sendPaypalEmailToUser = async (message, parsedData, chatId) => {
-  const userNickname = message.text.match(/👤 User: @\s*(\w+)/)[1];
-  const paypalLimit = message.text.match(/💶 Sum:\s*([\d+\-]+€)/)[1];
-  const updatedText = `${message.text}\n\n📩 Выданная палка: ${parsedData.email}`;
-  const paypalType = message.text.match(/REQUEST\s+(.+)!/)[1];
-  const userDoc = await db.collection("users").doc(userNickname);
-  const userData = await userDoc.get();
+const USERS_TIMER_PAYPAL = {};
 
-  await userDoc.update({
-    paypals: FieldValue.arrayUnion({
-      email: parsedData.email,
-      limit: paypalLimit,
-      type: paypalType,
-    }),
-  });
+export const sendPaypalEmailToUser = async (msg, parsedData, chatId) => {
+  try {
+    const userNickname = msg.message.text.match(/👤 User: @\s*(\w+)/)[1];
+    const paypalLimit = msg.message.text.match(/💶 Sum:\s*([\d+\-]+€)/)[1];
+    const updatedText = `${msg.message.text}\n\n📩 Выданная палка: ${parsedData.email}`;
+    const paypalType = msg.message.text.match(/REQUEST\s+(.+)!/)[1];
+    const userDoc = await db.collection("users").doc(userNickname);
+    // const userData = await userDoc.get();
 
-  await bot.editMessageText(updatedText, {
-    chat_id: chatId,
-    message_id: message.message_id,
-  });
-
-  await bot.sendMessage(
-    userData.data().chatId,
-    `🟢 Выдан PayPal: <b>${paypalType} | <code>${parsedData.email}</code></b>`,
-    {
-      parse_mode: "HTML",
-    }
-  );
-
-  if (paypalType !== "UKR") {
-    await db.collection("emails").doc(parsedData.email).update({
-      status: "Стоп",
+    await userDoc.update({
+      paypals: FieldValue.arrayUnion({
+        email: parsedData.email,
+        limit: paypalLimit,
+        type: paypalType,
+      }),
     });
 
-    await renewPaypalTime(
-      userData.data().chatId,
-      parsedData.email,
-      userNickname
+    await bot.editMessageText(updatedText, {
+      chat_id: chatId,
+      message_id: msg.message.message_id,
+    });
+
+    await bot.sendMessage(
+      msg.from.id,
+      `🟢 Выдан PayPal: <b>${paypalType} | <code>${parsedData.email}</code></b>`,
+      {
+        parse_mode: "HTML",
+      }
     );
+
+    if (paypalType !== "UKR") {
+      await db.collection("emails").doc(parsedData.email).update({
+        status: "Стоп",
+      });
+
+      if (renewPaypalUserState[msg.from.id]) {
+        renewPaypalUserState[msg.from.id].push({
+          email: parsedData.email,
+          emailReceived: true,
+          emailKept: false,
+          nickname: userNickname,
+        });
+      } else {
+        renewPaypalUserState[msg.from.id] = [
+          {
+            email: parsedData.email,
+            emailReceived: true,
+            emailKept: false,
+            emailProfited: false,
+            nickname: userNickname,
+          },
+        ];
+      }
+
+      renewPaypalValidity(msg.from.id, parsedData.email, userNickname);
+    }
+  } catch (e) {
+    console.log(e, "error sendPaypalEmailToUser");
   }
 };
 
-export const renewPaypalTime = async (chatId, email, nickname) => {
+export const renewPaypalValidity = (chatId, email, nickname) => {
   setTimeout(async () => {
-    await bot.sendMessage(
+    const userPaypal = renewPaypalUserState[chatId].filter((paypal) => {
+      return paypal.email === email;
+    })[0];
+
+    console.log(userPaypal, "userPaypal");
+
+    if (userPaypal.emailProfited) return;
+
+    const sentMessage = await bot.sendMessage(
       chatId,
       `<b>ℹ️ Продлить срок действия палки</b>\n\n<code>${email}</code>?`,
       {
@@ -62,30 +91,43 @@ export const renewPaypalTime = async (chatId, email, nickname) => {
       }
     );
 
-    renewPaypalUserState[chatId] = true;
-
-    if (renewPaypalUserState[chatId]) {
-      setTimeout(async () => {
+    setTimeout(async () => {
+      if (!userPaypal.emailKept) {
         await getBackPaypalToDatabase(email, chatId, nickname);
-      }, 7200000);
-    }
-  }, 7200000);
+
+        await bot.editMessageReplyMarkup(
+          {
+            inline_keyboard: [
+              [{ text: "Срок истёк 🔴", callback_data: "empty" }],
+            ],
+          },
+          {
+            message_id: sentMessage.message_id,
+            chat_id: chatId,
+          }
+        );
+      }
+      userPaypal.emailKept = false;
+    }, 20000);
+  }, 20000);
 };
 
-const getBackPaypalToDatabase = async (paypal, chatId, nickname) => {
-  const userData = await db.collection("users").doc(nickname).get();
+export const getBackPaypalToDatabase = async (paypal, chatId, nickname) => {
+  try {
+    const userData = await db.collection("users").doc(nickname).get();
 
-  await db.collection("emails").doc(paypal).update({
-    status: "Свободен",
-  });
+    await db.collection("emails").doc(paypal).update({
+      status: "Свободен",
+    });
 
-  const updatedUserPaypals = userData
-    .data()
-    .paypals.filter((item) => item.email !== paypal);
+    const updatedUserPaypals = userData
+      .data()
+      .paypals.filter((item) => item.email !== paypal);
 
-  await db.collection("users").doc(nickname).update({
-    paypals: updatedUserPaypals,
-  });
-
-  renewPaypalUserState[chatId] = false;
+    await db.collection("users").doc(nickname).update({
+      paypals: updatedUserPaypals,
+    });
+  } catch (e) {
+    console.log(e, "getBackPaypalToDatabase");
+  }
 };
