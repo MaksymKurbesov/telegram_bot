@@ -108,8 +108,8 @@ export const renewPaypalValidity = (chatId, email, nickname) => {
         );
       }
       userPaypal.emailKept = false;
-    }, 20000);
-  }, 20000);
+    }, 7200000);
+  }, 7200000);
 };
 
 export const getBackPaypalToDatabase = async (paypal, chatId, nickname) => {
