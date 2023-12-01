@@ -64,7 +64,6 @@ import {
 } from "./consts.js";
 import { captchaLion } from "./handlers/captchaLion.js";
 import {
-  getBackPaypalToDatabase,
   renewPaypalValidity,
   sendPaypalEmailToUser,
 } from "./handlers/sendPaypalEmailToUser.js";
@@ -760,16 +759,17 @@ const start = async () => {
     if (data === "renew_paypal") {
       const emailRegex = /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/;
       const email = message.text.match(emailRegex);
-      const userState = renewPaypalUserState[chat.id];
 
-      if (email && userState) {
-        const userPaypalIndex = userState.findIndex(
+      if (email && renewPaypalUserState[chat.id]) {
+        const userPaypalIndex = renewPaypalUserState[chat.id].findIndex(
           (obj) => obj["email"] === email[0]
         );
-        userState[userPaypalIndex] = {
-          ...userState[userPaypalIndex],
+        renewPaypalUserState[chat.id][userPaypalIndex] = {
+          ...renewPaypalUserState[chat.id][userPaypalIndex],
           emailKept: true,
         };
+
+        // console.log(userState, "userState");
 
         renewPaypalValidity(
           chat.id,
