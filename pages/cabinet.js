@@ -34,7 +34,7 @@ const cabinetOptions = (userData) => {
         [
           {
             text: "Взять PayPal 🅿️",
-            callback_data: "request_paypal",
+            callback_data: "request_paypal_by_user",
           },
           {
             text: "Взять IBAN 💳",
@@ -57,15 +57,15 @@ const cabinetOptions = (userData) => {
   };
 };
 
-const getFullCabinetPage = async (chatID, userNickname) => {
-  const userRef = await db.collection("users").doc(userNickname);
+const getFullCabinetPage = async (chatID) => {
+  const userRef = await db.collection("users").doc(chatID);
   const userDoc = await userRef.get();
 
   await bot.sendPhoto(chatID, MAIN_IMAGE, cabinetOptions(userDoc.data()));
 };
 
-const getCabinetPage = async (chatID, messageID, userNickname) => {
-  const userRef = await db.collection("users").doc(userNickname);
+const getCabinetPage = async (chatID, messageID) => {
+  const userRef = await db.collection("users").doc(`${chatID}`);
   const userDoc = await userRef.get();
 
   await bot.editMessageCaption(cabinetCaption(userDoc.data()), {

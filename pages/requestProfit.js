@@ -1,24 +1,26 @@
-import { bot } from "../index.js";
+import { bot, redisClient } from '../index.js';
+import { db } from '../db.js';
 
-const requestProfitCaption = (userPaypals) => {
+const requestProfitCaption = userPaypals => {
   const userPaypalsStr = userPaypals
-    .map((userPaypal) => {
+    .map(userPaypal => {
       return `<b>${userPaypal.type}</b> | ${userPaypal.email} | На сумму: ${userPaypal.limit}`;
     })
-    .join("\n");
+    .join('\n');
 
   return `<b>🅿️ Ваши PayPal:</b>\n\n${userPaypalsStr}`;
 };
 
-const requestProfitOptions = (userPaypals) => {
-  const userPaypalsButtons = userPaypals.map((userPaypal) => {
+const requestProfitOptions = userPaypals => {
+  const userPaypalsButtons = userPaypals.map(userPaypal => {
     return [
       {
         text: `${userPaypal.email}`,
-        callback_data: JSON.stringify({
-          action: "rp",
-          userPaypal: userPaypal.email,
-        }),
+        callback_data: `request_profit_paypal_${userPaypal.email}`,
+        // callback_data: JSON.stringify({
+        //   action: 'rp',
+        //   userPaypal: userPaypal.email,
+        // }),
       },
     ];
   });
@@ -29,20 +31,27 @@ const requestProfitOptions = (userPaypals) => {
       [
         {
           text: `Назад`,
-          callback_data: "cabinet",
+          callback_data: 'cabinet',
         },
       ],
     ],
   };
 };
 
-const requestProfit = async (chatID, messageID, userPaypals) => {
-  await bot.editMessageCaption(requestProfitCaption(userPaypals), {
-    chat_id: chatID,
-    message_id: messageID,
-    parse_mode: "HTML",
-    reply_markup: requestProfitOptions(userPaypals),
-  });
+const requestProfit = async (chatID, messageID) => {
+  try {
+    const userData = await db.collection('users').doc(`${chatID}`).get();
+    const { paypals } = userData.data();
+
+    await bot.editMessageCaption(requestProfitCaption(paypals), {
+      chat_id: chatID,
+      message_id: messageID,
+      parse_mode: 'HTML',
+      reply_markup: requestProfitOptions(paypals),
+    });
+  } catch (e) {
+    console.log(e, '(data === "request_profit")');
+  }
 };
 
 export { requestProfit };

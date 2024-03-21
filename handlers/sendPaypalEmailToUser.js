@@ -2,21 +2,18 @@ import { db } from "../db.js";
 import { FieldValue } from "firebase-admin/firestore";
 import { bot, renewPaypalUserState } from "../index.js";
 
-const USERS_TIMER_PAYPAL = {};
-
-export const sendPaypalEmailToUser = async (msg, parsedData, chatId) => {
+export const sendPaypalEmailToUser = async (paypalEmail, msg, chatId) => {
   try {
-    const userNickname = msg.message.text.match(/👤 User: @\s*(\w+)/)[1];
+    const userChatId = msg.message.text.match(/👤 User: \s*(\w+)/)[1];
     const paypalLimit = msg.message.text.match(/💶 Sum:\s*([\d+\-]+€)/)[1];
-    const updatedText = `${msg.message.text}\n\n📩 Выданная палка: ${parsedData.email}`;
+    const updatedText = `${msg.message.text}\n\n📩 Выданная палка: ${paypalEmail}`;
     const paypalType = msg.message.text.match(/REQUEST\s+(.+)!/)[1];
-    const userDoc = await db.collection("users").doc(userNickname);
-    const userData = await userDoc.get();
-    const userChatId = userData.data().chatId;
+
+    const userDoc = await db.collection("users").doc(`${userChatId}`);
 
     await userDoc.update({
       paypals: FieldValue.arrayUnion({
-        email: parsedData.email,
+        email: paypalEmail,
         limit: paypalLimit,
         type: paypalType,
       }),
@@ -29,41 +26,37 @@ export const sendPaypalEmailToUser = async (msg, parsedData, chatId) => {
 
     await bot.sendMessage(
       userChatId,
-      `🟢 Выдан PayPal: <b>${paypalType} | <code>${parsedData.email}</code></b>`,
+      `🟢 Выдан PayPal: <b>${paypalType} | <code>${paypalEmail}</code></b>`,
       {
         parse_mode: "HTML",
       }
     );
 
     if (paypalType !== "UKR") {
-      await db.collection("emails").doc(parsedData.email).update({
+      await db.collection("emails").doc(paypalEmail).update({
         status: "Стоп",
       });
 
       if (renewPaypalUserState[userChatId]) {
         renewPaypalUserState[userChatId].push({
-          email: parsedData.email,
+          email: paypalEmail,
           emailReceived: true,
           emailKept: false,
-          nickname: userNickname,
+          // nickname: userNickname,
         });
       } else {
         renewPaypalUserState[userChatId] = [
           {
-            email: parsedData.email,
+            email: paypalEmail,
             emailReceived: true,
             emailKept: false,
             emailProfited: false,
-            nickname: userNickname,
+            // nickname: userNickname,
           },
         ];
       }
 
-      renewPaypalValidity(
-        userData.data().chatId,
-        parsedData.email,
-        userNickname
-      );
+      // renewPaypalValidity(userChatId, parsedData.email, userNickname);
     }
   } catch (e) {
     console.log(e, "error sendPaypalEmailToUser");
@@ -71,8 +64,6 @@ export const sendPaypalEmailToUser = async (msg, parsedData, chatId) => {
 };
 
 export const renewPaypalValidity = (chatId, email, nickname) => {
-  console.log(chatId, "chatId");
-
   setTimeout(async () => {
     const userPaypal = renewPaypalUserState[chatId].filter((paypal) => {
       return paypal.email === email;

@@ -1,168 +1,117 @@
-import { bot, userPaypalState } from "../index.js";
-import { REQUEST_PAYPAL_UKR_ID, REQUEST_PAYPAL_EU_ID } from "../consts.js";
-import { db } from "../db.js";
-import { getEmailButtons } from "../helpers.js";
+import { bot, redisClient } from '../index.js';
+import { REQUEST_PAYPAL_UKR_ID, REQUEST_PAYPAL_EU_ID } from '../consts.js';
+import { db } from '../db.js';
+import { getEmailButtons } from '../helpers.js';
 
-const requestPaypal = async (chatId, messageId) => {
-  userPaypalState[chatId] = {
-    paypal: "",
-    amount: "",
-  };
+export const PAYPAL_MAP = {
+  ukr: 'UKR',
+  ff: 'F/F',
+};
 
-  await bot.editMessageCaption(
-    `<b>🅿️ ПАЛКИ!</b>\n\n<b>PayPal UKR!</b>\nВаш процент: <b>70%</b>\n\n<b>PayPal EU F/F!</b>\nВаш процент: <b>70%</b>`,
-    {
-      chat_id: chatId,
-      message_id: messageId,
-      parse_mode: "HTML",
-      reply_markup: {
-        inline_keyboard: [
-          [
-            { text: "UKR", callback_data: "request_ukr" },
-            { text: "EU F/F", callback_data: "request_eu_ff" },
+const requestPaypalByUser = async (chatId, messageId) => {
+  try {
+    await bot.editMessageCaption(
+      `<b>🅿️ ПАЛКИ!</b>\n\n<b>PayPal UKR!</b>\nВаш процент: <b>70%</b>\n\n<b>PayPal EU F/F!</b>\nВаш процент: <b>70%</b>`,
+      {
+        chat_id: chatId,
+        message_id: messageId,
+        parse_mode: 'HTML',
+        reply_markup: {
+          inline_keyboard: [
+            [
+              { text: 'UKR', callback_data: 'request_paypal_type_ukr' },
+              { text: 'EU F/F', callback_data: 'request_paypal_type_ff' },
+            ],
+            [
+              {
+                text: `Отмена`,
+                callback_data: 'cabinet',
+              },
+            ],
           ],
-          [
-            {
-              text: `Отмена`,
-              callback_data: "cabinet",
-            },
-          ],
-        ],
-      },
-    }
-  );
+        },
+      }
+    );
+  } catch (e) {
+    console.log(e, 'data === "request_paypal"');
+  }
 };
 
 const sendWaitMessage = async (chatId, messageId) => {
-  await bot.editMessageCaption(
-    `<b>Подождите 1 минуту для создания новой заявки!</b>`,
-    {
-      chat_id: chatId,
-      message_id: messageId,
-      parse_mode: "HTML",
-      reply_markup: {
-        inline_keyboard: [
-          [
-            {
-              text: `Назад`,
-              callback_data: "cabinet",
-            },
-          ],
-        ],
-      },
-    }
-  );
-};
-
-const requestTypePaypal = async (chatId, messageId, type) => {
-  userPaypalState[chatId].paypal = type;
-
-  await bot.editMessageCaption(`<b>Выберите сумму в €.</b>`, {
+  await bot.editMessageCaption(`<b>Подождите 1 минуту для создания новой заявки!</b>`, {
     chat_id: chatId,
     message_id: messageId,
-    parse_mode: "HTML",
-    reply_markup:
-      type === "UKR"
-        ? getPaypalUKROptions().reply_markup
-        : getPaypalFFOptions().reply_markup,
-  });
-};
-
-const sendPaypalRequest = async (chatId, messageId, data, nickname) => {
-  const userData = await db.collection("users").doc(nickname).get();
-
-  await bot.editMessageCaption(
-    `Заявка на получение PayPal успешно отправлена!`,
-    {
-      reply_markup: {
-        inline_keyboard: [[{ text: "Назад", callback_data: "cabinet" }]],
-      },
-      chat_id: chatId,
-      message_id: messageId,
-    }
-  );
-
-  const paypalAmount = data.amount.split("_")[1];
-  const availablePaypalsRef = await db.collection("emails");
-  const availablePaypalsSnap = await availablePaypalsRef
-    .where("type", "==", data.paypal)
-    .where("status", "==", "Свободен")
-    .get();
-
-  const availablePaypals = [];
-
-  await availablePaypalsSnap.docs.forEach((paypal) => {
-    availablePaypals.push(paypal.data());
-  });
-
-  if (data.paypal === "UKR") {
-    await bot.sendMessage(
-      REQUEST_PAYPAL_UKR_ID,
-      `<b>REQUEST ${
-        data.paypal
-      }!</b>\n\n\n💶 Sum: <b>${paypalAmount}€</b>\n👤 User: <b>@${nickname}</b>\n🪪 Nametag: ${
-        userData.data().nametag
-      }`,
-      {
-        reply_markup: {
-          inline_keyboard: getEmailButtons(availablePaypals, 0, data.paypal),
-        },
-        parse_mode: "HTML",
-      }
-
-      // getKeyboardByPaypals(availablePaypals)
-    );
-  }
-
-  if (data.paypal === "F/F") {
-    await bot.sendMessage(
-      REQUEST_PAYPAL_EU_ID,
-      `<b>REQUEST ${
-        data.paypal
-      }!</b>\n\n\n💶 Sum: <b>${paypalAmount}€</b>\n👤 User: <b>@${nickname}</b>\n🪪 Nametag: ${
-        userData.data().nametag
-      }`,
-      {
-        reply_markup: {
-          inline_keyboard: getEmailButtons(availablePaypals, 0, data.paypal),
-        },
-        parse_mode: "HTML",
-      }
-
-      // getKeyboardByPaypals(availablePaypals)
-    );
-  }
-};
-
-const getKeyboardByPaypals = (paypals) => {
-  const inlineKeyboard = paypals.map((paypal) => {
-    return [
-      {
-        text: paypal.email,
-        callback_data: JSON.stringify({
-          action: "email_selected",
-          email: paypal.email,
-        }),
-      },
-    ];
-  });
-
-  return {
+    parse_mode: 'HTML',
     reply_markup: {
       inline_keyboard: [
-        ...inlineKeyboard,
-        [{ text: "⬅️", callback_data: "emails_page_back" }],
-        [{ text: "➡️", callback_data: "emails_page_next" }],
         [
           {
-            text: "Отмена",
-            callback_data: "emailRequestCanceled",
+            text: `Назад`,
+            callback_data: 'cabinet',
           },
         ],
       ],
     },
-    parse_mode: "HTML",
-  };
+  });
+};
+
+const requestTypePaypal = async (chatId, messageId, type) => {
+  try {
+    await redisClient.hset(`user:${chatId}`, 'request_paypal_type', type);
+
+    await bot.editMessageCaption(`<b>Выберите сумму в €.</b>`, {
+      chat_id: chatId,
+      message_id: messageId,
+      parse_mode: 'HTML',
+      reply_markup: type === 'ukr' ? getPaypalUKROptions().reply_markup : getPaypalFFOptions().reply_markup,
+    });
+  } catch (e) {
+    console.log(e, 'requestTypePaypal');
+  }
+};
+
+const sendPaypalRequest = async (chatId, messageId, amount) => {
+  try {
+    const userData = await db.collection('users').doc(`${chatId}`).get();
+    const paypalType = await redisClient.hget(`user:${chatId}`, 'request_paypal_type');
+
+    await bot.editMessageCaption(`Заявка на получение PayPal успешно отправлена!`, {
+      reply_markup: {
+        inline_keyboard: [[{ text: 'Назад', callback_data: 'cabinet' }]],
+      },
+      chat_id: chatId,
+      message_id: messageId,
+    });
+
+    const availablePaypalsRef = await db.collection('emails');
+    const availablePaypalsSnap = await availablePaypalsRef
+      .where('type', '==', PAYPAL_MAP[paypalType])
+      .where('status', '==', 'Свободен')
+      .get();
+
+    const availablePaypals = [];
+
+    await availablePaypalsSnap.docs.forEach(paypal => {
+      availablePaypals.push(paypal.data());
+    });
+
+    const requestChatId = paypalType === 'ukr' ? REQUEST_PAYPAL_UKR_ID : REQUEST_PAYPAL_EU_ID;
+
+    await bot.sendMessage(
+      requestChatId,
+      `<b>REQUEST ${
+        PAYPAL_MAP[paypalType]
+      }!</b>\n\n\n💶 Sum: <b>${amount}€</b>\n👤 User: <b>${chatId}</b>\n🪪 Nametag: ${userData.data().nametag}`,
+      {
+        reply_markup: {
+          inline_keyboard: getEmailButtons(availablePaypals, 0, PAYPAL_MAP[paypalType]),
+        },
+        parse_mode: 'HTML',
+      }
+    );
+  } catch (e) {
+    console.log(e, 'data === isPaypalAmount');
+  }
 };
 
 const getPaypalFFOptions = () => {
@@ -170,13 +119,13 @@ const getPaypalFFOptions = () => {
     reply_markup: {
       inline_keyboard: [
         [
-          { text: "0€ - 100€", callback_data: "paypal_0-100" },
-          { text: "100€+", callback_data: "paypal_100+" },
+          { text: '0€ - 100€', callback_data: 'paypal_request_amount_0-100' },
+          { text: '100€+', callback_data: 'paypal_request_amount_100+' },
         ],
         [
           {
             text: `Отмена`,
-            callback_data: "cabinet",
+            callback_data: 'cabinet',
           },
         ],
       ],
@@ -189,18 +138,27 @@ const getPaypalUKROptions = () => {
     reply_markup: {
       inline_keyboard: [
         [
-          { text: "40€ - 100€", callback_data: "paypal_40-100" },
-          { text: "100€ - 250€", callback_data: "paypal_100-250" },
+          { text: '40€ - 100€', callback_data: 'paypal_request_amount_40-100' },
+          {
+            text: '100€ - 250€',
+            callback_data: 'paypal_request_amount_100-250',
+          },
         ],
         [
-          { text: "250€ - 400€", callback_data: "paypal_250-400" },
-          { text: "400€ - 500€", callback_data: "paypal_400-500" },
+          {
+            text: '250€ - 400€',
+            callback_data: 'paypal_request_amount_250-400',
+          },
+          {
+            text: '400€ - 500€',
+            callback_data: 'paypal_request_amount_400-500',
+          },
         ],
         [
-          { text: "500€+", callback_data: "paypal_500+" },
+          { text: '500€+', callback_data: 'paypal_request_amount_500+' },
           {
             text: `Отмена`,
-            callback_data: "cabinet",
+            callback_data: 'cabinet',
           },
         ],
       ],
@@ -208,4 +166,4 @@ const getPaypalUKROptions = () => {
   };
 };
 
-export { requestPaypal, requestTypePaypal, sendPaypalRequest, sendWaitMessage };
+export { requestPaypalByUser, requestTypePaypal, sendPaypalRequest, sendWaitMessage };

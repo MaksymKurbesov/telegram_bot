@@ -1,4 +1,4 @@
-import { bot, profitMessages, usersCache } from "../index.js";
+import { bot, profitMessages } from "../index.js";
 import { db } from "../db.js";
 import { ADMIN_PANEL_CHAT_ID } from "../consts.js";
 import { countEmailsByType } from "../helpers.js";
@@ -95,6 +95,8 @@ export const addEmailsToDataBase = async (emails, emailType, queryMsg) => {
   }
 };
 
+
+// DO REFACTOR
 export const sendMessageToAllUser = async (message) => {
   const usersChatId = Object.values(usersCache).map((user) => user.chatId);
   usersChatId.forEach((chatId) => {

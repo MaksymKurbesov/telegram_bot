@@ -1,22 +1,11 @@
-import { db } from "../db.js";
-import { sendCurrentPage } from "../helpers.js";
-import { userPagination } from "../index.js";
+import { db } from '../db.js';
+import { sendCurrentPage } from '../helpers.js';
+// import { userPagination } from '../index.js';
 
-export const getUserProfits = async (
-  chatId,
-  messageId,
-  username,
-  profitsType
-) => {
-  userPagination[chatId] = 1;
+export const getUserProfits = async (chatId, messageId, profitsType) => {
+  // userPagination[chatId] = 1;
 
-  const userData = await db.collection("users").doc(username).get();
+  const userData = await db.collection('users').doc(`${chatId}`).get();
 
-  await sendCurrentPage(
-    chatId,
-    messageId,
-    1,
-    userData.data().profits,
-    profitsType === "ukr" ? "UKR" : "F/F"
-  );
+  await sendCurrentPage(chatId, messageId, 1, userData.data().profits, profitsType === 'ukr' ? 'UKR' : 'F/F');
 };
