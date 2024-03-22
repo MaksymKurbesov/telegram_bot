@@ -53,8 +53,6 @@ export const updateNameTag = async (chatId, messageId, user, nametag) => {
 
     const lastMessageId = await redisClient.hget(`user:${chatId}`, 'request_change_nametag_message_id');
 
-    await bot.deleteMessage(chatId, messageId);
-
     await bot.editMessageCaption(`<b>NAMETAG успешно изменён.</b>`, {
       chat_id: chatId,
       message_id: lastMessageId,
