@@ -6,14 +6,15 @@ process.env['NTBA_FIX_350'] = 1;
 import TelegramBot from 'node-telegram-bot-api';
 import { checkAntiFloodStatus } from './floodSystem.js';
 import {
-  extractValue,
+  extractFieldValue,
   getEmailButtons,
   isArrayOfEmails,
   isChatWithoutCaptcha,
+  isEmpty,
   sendCurrentPage,
-  updateAmountById,
   updateAmountInPaymentsChat,
-  updateNameById,
+  updateProfitAmount,
+  updateProfitName,
 } from './helpers.js';
 
 import { sendCaptchaMessage } from './handlers/captcha.js';
@@ -64,6 +65,7 @@ import { getUserProfits } from './handlers/getUserProfits.js';
 import { changeNameTag, getNameTag, updateNameTag } from './handlers/nametag.js';
 import { getSupportPage, sendMessageToAdminChat } from './handlers/support.js';
 import { getChats } from './handlers/chats.js';
+import FIREBASE_API from './FIREBASE_API.js';
 
 export const bot = new TelegramBot(process.env.TOKEN_BOT, { polling: true });
 
@@ -78,11 +80,14 @@ const usersPaypalTimeout = {};
 export let adminAddEmailType = null;
 export let adminDeleteEmail = null;
 export let WORK_STATUS = false;
-let editableProfit = {
-  message_id: null,
-  chat_id: null,
-  payment_message_id: null,
-  payment_chat_id: null,
+
+const updatedObjects = {
+  amount: {
+    message: `🟢 Сумма профита успешно изменена!`,
+  },
+  name: {
+    message: `🟢 Имя профита успешно изменено!`,
+  },
 };
 
 const start = async () => {
@@ -99,9 +104,18 @@ const start = async () => {
       const chatId = chat.id;
       const isAdminChat = chatId === Number(ADMIN_PANEL_CHAT_ID);
 
-      const user = await redisClient.hgetall(`user:${chat.id}`);
-      const { form_step, request_change_nametag, request_support, request_edit_profit, request_edit_profit_type } =
-        user;
+      const user = await redisClient.hgetall(`user:${msg.from.id}`);
+
+      const {
+        form_step,
+        request_change_nametag,
+        request_support,
+        request_edit_profit,
+        request_edit_profit_type,
+        request_edit_profit_caption,
+        request_edit_profit_message_id,
+        request_edit_profit_chat_id,
+      } = user;
 
       if (isAdminChat && text?.startsWith('/all')) {
         const parts = text.split('/all');
@@ -109,86 +123,70 @@ const start = async () => {
         return await sendMessageToAllUser(message);
       }
 
-      // if (editableProfit.type === 'amount' || editableProfit.type === 'name') {
       if (request_edit_profit === 'true') {
-        console.log('work');
-        const updatedObjects = {
-          amount: {
-            message: `🟢 Сумма профита успешно изменена!`,
-          },
-          name: {
-            message: `🟢 Имя профита успешно изменено!`,
-          },
-        };
+        const userChatID = extractFieldValue(request_edit_profit_caption, 'user_chat_id');
+        const profitId = extractFieldValue(request_edit_profit_caption, 'Профит ID');
+        const correctProfitId = profitId.split('#')[1];
 
-        const userParts = editableProfit.message_caption.split('user: @');
-        const userAndRest = userParts[1];
-        const user = userAndRest.split('\n')[0];
+        const editedProfitUser = await redisClient.hgetall(`user:${userChatID}`);
+        const { request_edit_profit_user_chat_id } = editedProfitUser;
 
-        const profitIdParts = editableProfit.message_caption.split('Профит ID: ');
-        const profitIdAndRest = profitIdParts[1];
-        const profitId = profitIdAndRest.split('\n')[0];
-
-        const userDoc = await db.collection('users').doc(user);
-        const userData = await userDoc.get();
         let updatedCaption;
 
         const profitInCache = profitMessages.find(profit => {
           return profit.id === profitId.split('#')[1];
         });
 
-        if (editableProfit.type === 'amount') {
-          const updatedProfits = updateAmountById(userData.data().profits, profitId.split('#')[1], text);
+        const userProfits = await FIREBASE_API.getUserProfits(request_edit_profit_user_chat_id);
 
-          updatedCaption = editableProfit.message_caption.replace(/(Сумма:\s*)[^\n]+/, '$1' + `${text}€`);
+        if (request_edit_profit_type === 'amount') {
+          const updatedProfits = updateProfitAmount(userProfits, correctProfitId, text);
+
+          updatedCaption = request_edit_profit_caption.replace(/(Сумма:\s*)[^\n]+/, '$1' + `${text}€`);
 
           if (profitInCache) {
             profitInCache.amount = text;
           }
 
-          await userDoc.update({
-            profits: updatedProfits,
-          });
+          await FIREBASE_API.updateUser(request_edit_profit_user_chat_id, { profits: updatedProfits });
         }
 
-        if (editableProfit.type === 'name') {
-          const updatedProfits = updateNameById(userData.data().profits, profitId.split('#')[1], text);
+        if (request_edit_profit_type === 'name') {
+          const updatedProfits = updateProfitName(userProfits, correctProfitId, text);
 
-          updatedCaption = editableProfit.message_caption.replace(/(Имя:\s*)[^\n]+/, '$1' + `${text}`);
+          updatedCaption = request_edit_profit_caption.replace(/(Имя:\s*)[^\n]+/, '$1' + `${text}`);
 
           if (profitInCache) {
             profitInCache.name = text;
           }
 
-          await userDoc.update({
-            profits: updatedProfits,
-          });
+          await FIREBASE_API.updateUser(request_edit_profit_user_chat_id, { profits: updatedProfits });
         }
 
-        if (editableProfit.payment_message_id && editableProfit.type === 'amount') {
-          await bot.editMessageText(
-            updateAmountInPaymentsChat(editableProfit.paypalType, editableProfit.nametag, text),
-            {
-              message_id: editableProfit.payment_message_id,
-              chat_id: PAYMENTS_CHAT_ID,
-              reply_markup: {
-                inline_keyboard: [
-                  [
-                    {
-                      text: `${STATUS_EMOJI_MAP[editableProfit.status]} ${editableProfit.status}`,
-                      callback_data: 'profit_status',
-                    },
-                  ],
-                ],
-              },
-              parse_mode: 'HTML',
-            }
-          );
-        }
-
+        // if (request_edit_profit_type === 'amount') {
+        //   await bot.editMessageText(
+        //     updateAmountInPaymentsChat(editableProfit.paypalType, editableProfit.nametag, text),
+        //     {
+        //       message_id: editableProfit.payment_message_id,
+        //       chat_id: PAYMENTS_CHAT_ID,
+        //       reply_markup: {
+        //         inline_keyboard: [
+        //           [
+        //             {
+        //               text: `${STATUS_EMOJI_MAP[editableProfit.status]} ${editableProfit.status}`,
+        //               callback_data: 'profit_status',
+        //             },
+        //           ],
+        //         ],
+        //       },
+        //       parse_mode: 'HTML',
+        //     }
+        //   );
+        // }
+        //
         await bot.editMessageCaption(updatedCaption, {
-          chat_id: editableProfit.chat_id,
-          message_id: editableProfit.message_id,
+          chat_id: request_edit_profit_chat_id,
+          message_id: request_edit_profit_message_id,
           reply_markup: {
             inline_keyboard: [
               [
@@ -208,9 +206,9 @@ const start = async () => {
           },
         });
 
-        await bot.sendMessage(chatId, updatedObjects[editableProfit.type].message);
+        await redisClient.hset(`user:${userChatID}`, { request_edit_profit: false });
 
-        editableProfit = {};
+        await bot.sendMessage(chatId, updatedObjects[request_edit_profit_type].message);
       }
 
       if (isAdminChat && text === '/admin') {
@@ -245,7 +243,7 @@ const start = async () => {
         return;
       }
 
-      if (!user) {
+      if (isEmpty(user)) {
         return await sendCaptchaMessage(msg);
       }
 
@@ -267,14 +265,17 @@ const start = async () => {
       }
 
       if (form_step === '2') {
+        await bot.deleteMessage(chatId, msg.message_id);
         return await requestProfitName(chatId, msg, text);
       }
 
       if (form_step === '3') {
+        await bot.deleteMessage(chatId, msg.message_id);
         return await requestProfitWallet(chatId, msg, text);
       }
 
       if (request_change_nametag === 'true') {
+        await bot.deleteMessage(chat.id, msg.message_id);
         await updateNameTag(chat.id, msg.message_id, user, text);
       }
 
@@ -370,13 +371,13 @@ const start = async () => {
         member_limit: 1,
       });
 
-      await redisClient.set(
-        `${chatId}`,
-        JSON.stringify({
-          ...user,
-          linkIsGenerated: true,
-        })
-      );
+      // await redisClient.set(
+      //   `${chatId}`,
+      //   JSON.stringify({
+      //     ...user,
+      //     linkIsGenerated: true,
+      //   })
+      // );
 
       await bot.sendMessage(chat.id, `Ссылка на чат: ${inviteLink.invite_link}`);
     }
@@ -446,43 +447,28 @@ const start = async () => {
     if (data.startsWith('change_profit')) {
       const changeProfitType = data.split('_')[2];
 
-      const regexProfitId = /Профит ID: #(.+)/;
-      const regexPaymentMsgId = /payment_message_id: \s*(\d+)/;
-      const regexChatId = /user_chat_id:\s*(\d+)/;
+      const profitId = extractFieldValue(message.caption, `Профит ID`);
+      const chatId = extractFieldValue(message.caption, `user_chat_id`);
 
-      const type = extractValue(message.caption, 'Тип: ');
-      const nametag = extractValue(message.caption, 'nametag: ');
-      const status = extractValue(message.caption, 'Текущий статус профита: ');
+      const requestProfitData = {
+        request_edit_profit: true,
+        request_edit_profit_type: changeProfitType,
+        request_edit_profit_message_id: message_id,
+        request_edit_profit_caption: message.caption,
+        request_edit_profit_user_chat_id: chatId,
+        request_edit_profit_chat_id: chat.id,
+      };
 
-      const profitId = message.caption.match(regexProfitId);
-      const paymentMsgId = message.caption.match(regexPaymentMsgId);
-      const chatId = message.caption.match(regexChatId);
-
-      await redisClient.hset(
-        `user:${chatId[1]}`,
-        `request_edit_profit`,
-        true,
-        'request_edit_profit_type',
-        changeProfitType
-      );
-
-      editableProfit.message_id = message_id;
-      editableProfit.chat_id = chat.id;
-      editableProfit.message_caption = message.caption;
-      editableProfit.type = changeProfitType;
-      editableProfit.paypalType = type;
-      editableProfit.payment_message_id = paymentMsgId ? paymentMsgId[1] : null;
-      editableProfit.nametag = nametag;
-      editableProfit.status = status;
+      await redisClient.hset(`user:${chatId}`, requestProfitData);
 
       if (changeProfitType === 'amount') {
-        await bot.sendMessage(chat.id, `<b>ℹ️ Укажите новую сумму для профита #${profitId[1]}!</b>`, {
+        await bot.sendMessage(chat.id, `<b>ℹ️ Укажите новую сумму для профита ${profitId}!</b>`, {
           parse_mode: 'HTML',
         });
       }
 
       if (changeProfitType === 'name') {
-        await bot.sendMessage(chat.id, `<b>ℹ️ Укажите новое имя для профита #${profitId[1]}!</b>`, {
+        await bot.sendMessage(chat.id, `<b>ℹ️ Укажите новое имя для профита ${profitId}!</b>`, {
           parse_mode: 'HTML',
         });
       }
@@ -527,10 +513,8 @@ const start = async () => {
 
     if (data.startsWith('confirm-status')) {
       const status = STATUS_MAP[data.split('-')[2]];
-      const parts = message.caption?.split('user: @');
-      const username = parts[1].split('\n')[0];
 
-      await setProfitStatus(status, message, username, chat.id);
+      await setProfitStatus(status, message, chat.id, msg.from.id);
     }
 
     if (data === 'delete_message') {

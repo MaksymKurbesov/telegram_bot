@@ -100,7 +100,17 @@ const isChatWithoutCaptcha = chatId => {
   return isAdminChat || isRequestProfitChat || isRequestPaypalChat || isPaymentChat || isTalkChat;
 };
 
-const updateAmountById = (array, id, newAmount) => {
+const isEmpty = obj => {
+  for (const prop in obj) {
+    if (Object.hasOwn(obj, prop)) {
+      return false;
+    }
+  }
+
+  return true;
+};
+
+const updateProfitAmount = (array, id, newAmount) => {
   // Находим индекс объекта с нужным id
   const index = array.findIndex(item => item.id === id);
 
@@ -116,7 +126,7 @@ const updateAmountById = (array, id, newAmount) => {
   }
 };
 
-const updateNameById = (array, id, newName) => {
+const updateProfitName = (array, id, newName) => {
   // Находим индекс объекта с нужным id
   const index = array.findIndex(item => item.id === id);
 
@@ -132,7 +142,7 @@ const updateNameById = (array, id, newName) => {
   }
 };
 
-const addUserFields = (chatId, nickname) => {
+const generateUser = (chatId, nickname) => {
   return {
     chatId,
     nickname,
@@ -154,6 +164,28 @@ const extractValue = (str, pattern) => {
     return parts[1].split('\n')[0].trim(); // trim() уберет пробельные символы в начале и конце строки
   }
   return null; // или любое другое значение для обозначения, что ничего не найдено
+};
+
+const extractFieldValue = (str, key) => {
+  const regex = new RegExp(key + ':\\s*([\\w€@#.]+)');
+  // Ищем соответствие в строке
+  const match = str.match(regex);
+  // Возвращаем найденное значение, если оно есть
+  return match ? match[1] : null;
+};
+
+const getInfoFromMessage = message => {
+  const messageId = extractFieldValue(message.caption, `profit_message_id`);
+  const user_chat_id = extractFieldValue(message.caption, `user_chat_id`);
+  const profitId = extractFieldValue(message.caption, `Профит ID`);
+
+  const correctProfitId = profitId.split('#')[1];
+
+  return {
+    profit_message_id: messageId,
+    user_chat_id: user_chat_id,
+    profitId: correctProfitId,
+  };
 };
 
 const generateNametag = numberSet => {
@@ -207,19 +239,24 @@ const countEmailsByType = async () => {
 };
 
 const updateAmountInPaymentsChat = (type, user, amount) => {
-  return `${type === 'UKR' ? '🇺🇦' : '🇪🇺'} Paypal: <b>${type}</b>\n👤 Пользователь: <b>${user}</b>\n💶 Сумма: <b>${amount}€</b>`;
+  return `${
+    type === 'UKR' ? '🇺🇦' : '🇪🇺'
+  } Paypal: <b>${type}</b>\n👤 Пользователь: <b>${user}</b>\n💶 Сумма: <b>${amount}€</b>`;
 };
 
 export {
-  addUserFields,
+  generateUser,
   generateUniqueID,
   sendCurrentPage,
   extractValue,
   countEmailsByType,
   isArrayOfEmails,
   isChatWithoutCaptcha,
-  updateAmountById,
-  updateNameById,
+  updateProfitAmount,
+  updateProfitName,
   getEmailButtons,
   updateAmountInPaymentsChat,
+  isEmpty,
+  extractFieldValue,
+  getInfoFromMessage,
 };

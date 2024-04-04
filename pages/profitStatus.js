@@ -1,7 +1,9 @@
-import { bot, profitMessages } from '../index.js';
+import { bot, profitMessages, redisClient } from '../index.js';
 import { db } from '../db.js';
 import { PAYMENTS_CHAT_ID, REQUEST_PROFIT_EU_ID, REQUEST_PROFIT_UKR_ID, STATUS_EMOJI_MAP } from '../consts.js';
-import { extractValue } from '../helpers.js';
+import { extractFieldValue, extractValue, getInfoFromMessage } from '../helpers.js';
+import { getUserProfits } from '../handlers/getUserProfits.js';
+import FIREBASE_API from '../FIREBASE_API.js';
 
 const updateProfitStatus = (message, newStatus, id) => {
   const regex = /(🟢 Текущий статус профита: )[^\n]+/;
@@ -9,40 +11,19 @@ const updateProfitStatus = (message, newStatus, id) => {
   return updatedStatus.replace(/payment_message_id: .*/, 'payment_message_id: ' + id);
 };
 
-export let paymentMessageInChat = null;
-
-const getInfoFromMessage = message => {
-  const regexMsgId = /profit_message_id:\s*(\d+)/;
-  const regexPaymentMsgId = /payment_message_id: \s*(\d+)/;
-  const regexChatId = /user_chat_id:\s*(\d+)/;
-  const regexProfitId = /Профит ID: #(.+)/;
-
-  const messageId = message.caption.match(regexMsgId);
-  const paymentMessageId = message.caption.match(regexPaymentMsgId);
-  const chatId = message.caption.match(regexChatId);
-  const profitId = message.caption.match(regexProfitId);
-
-  return {
-    messageId: messageId[1],
-    paymentMessageId: paymentMessageId ? paymentMessageId[1] : null,
-    chatId: chatId[1],
-    profitId: profitId[1],
-  };
-};
-
-export const setProfitStatus = async (status, message, nickname, profitChatId) => {
+export const setProfitStatus = async (status, message, profitChatId, adminID) => {
   try {
-    const { messageId, paymentMessageId, chatId, profitId } = getInfoFromMessage(message);
+    const { profit_message_id, user_chat_id, profitId } = getInfoFromMessage(message);
 
     const type = extractValue(message.caption, 'Тип: ');
     const amount = extractValue(message.caption, 'Сумма: ');
     const nametag = extractValue(message.caption, 'nametag: ');
 
     if (status === 'НА ПАЛКЕ!') {
-      paymentMessageInChat = await bot.sendMessage(
+      const sendMessage = await bot.sendMessage(
         PAYMENTS_CHAT_ID,
         `${
-          type === 'UKR' ? '🇺🇦' : '🇪🇺'
+          type === 'ukr' ? '🇺🇦' : '🇪🇺'
         } Paypal: <b>${type}</b>\n👤 Пользователь: <b>${nametag}</b>\n💶 Сумма: <b>${amount}</b>`,
         {
           parse_mode: 'HTML',
@@ -51,7 +32,11 @@ export const setProfitStatus = async (status, message, nickname, profitChatId) =
           },
         }
       );
+
+      await redisClient.hset(`user:${adminID}`, { request_edit_profit_payment_message_id: sendMessage.message_id });
     }
+
+    const payment_message_id = await redisClient.hget(`user:${adminID}`, `request_edit_profit_payment_message_id`);
 
     if (status === 'ИНСТАНТ!') {
       profitMessages.push({
@@ -78,18 +63,18 @@ export const setProfitStatus = async (status, message, nickname, profitChatId) =
       );
     }
 
-    const profitDoc = await db.collection('users').doc(`${chatId}`).get();
-    const profits = profitDoc.data().profits;
-    const profitToUpdate = profits.find(profit => profit.id === profitId);
+    const userProfits = await FIREBASE_API.getUserProfits(user_chat_id);
+
+    const profitToUpdate = userProfits.find(profit => profit.id === profitId);
     profitToUpdate.status = status;
 
-    await db.collection('users').doc(`${chatId}`).update({ profits: profits });
+    await FIREBASE_API.updateUser(user_chat_id, { profits: userProfits });
 
     await bot.sendMessage(
-      chatId,
+      user_chat_id,
       `<b>ℹ️ Статус профита #${profitId}:\n\n${STATUS_EMOJI_MAP[status]} ${status}${
         status === 'НА ПАЛКЕ!'
-          ? `\n\nСсылка на профит в чате выплат: https://t.me/c/2017066381/${paymentMessageInChat.message_id}`
+          ? `\n\nСсылка на профит в чате выплат: https://t.me/c/2017066381/${payment_message_id}`
           : ''
       }</b>`,
       {
@@ -100,17 +85,19 @@ export const setProfitStatus = async (status, message, nickname, profitChatId) =
       }
     );
 
-    // if (paymentMessageInChat) {
-    await bot.editMessageCaption(`${updateProfitStatus(message.caption, status, paymentMessageInChat?.message_id)}`, {
+    // edit profit in profit channel
+    // if (payment_message_id) {
+    await bot.editMessageCaption(`${updateProfitStatus(message.caption, status, profit_message_id)}`, {
       reply_markup: {
         inline_keyboard: [[{ text: 'Назад', callback_data: 'back_to_profit_status' }]],
       },
-      chat_id: type === 'UKR' ? REQUEST_PROFIT_UKR_ID : REQUEST_PROFIT_EU_ID,
+      chat_id: type === 'ukr' ? REQUEST_PROFIT_UKR_ID : REQUEST_PROFIT_EU_ID,
       message_id: message.message_id,
       parse_mode: 'HTML',
     });
     // }
 
+    // edit profit in user bot
     await bot.editMessageReplyMarkup(
       {
         inline_keyboard: [
@@ -123,12 +110,13 @@ export const setProfitStatus = async (status, message, nickname, profitChatId) =
         ],
       },
       {
-        chat_id: chatId,
-        message_id: messageId,
+        chat_id: user_chat_id,
+        message_id: profit_message_id,
       }
     );
 
-    if (paymentMessageId) {
+    // edit profit in payment chat
+    if (payment_message_id) {
       await bot.editMessageReplyMarkup(
         {
           inline_keyboard: [
@@ -142,7 +130,7 @@ export const setProfitStatus = async (status, message, nickname, profitChatId) =
         },
         {
           chat_id: PAYMENTS_CHAT_ID,
-          message_id: paymentMessageId,
+          message_id: payment_message_id,
         }
       );
     }

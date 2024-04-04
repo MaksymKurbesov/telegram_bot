@@ -103,8 +103,6 @@ export const requestProfitName = async (chatId, msg, amount) => {
     const user = await redisClient.hgetall(`user:${chatId}`);
     const { request_paypal_type, request_profit_paypalEmail, profit_message_id } = user;
 
-    await bot.deleteMessage(chatId, msg.message_id);
-
     await redisClient.hset(`user:${chatId}`, 'request_profit_amount', amount);
     await redisClient.hincrby(`user:${chatId}`, 'form_step', 1);
 
@@ -130,8 +128,6 @@ export const requestProfitWallet = async (chatId, msg, name) => {
     const { request_paypal_type, request_profit_paypalEmail, profit_message_id } = user;
 
     await redisClient.hset(`user:${chatId}`, 'request_profit_name', name);
-
-    await bot.deleteMessage(chatId, msg.message_id);
 
     await bot.editMessageText(
       `<b>Оформление профита на PayPal ${request_paypal_type}:\n\n${request_profit_paypalEmail}\n\nУкажите на какой кошелёк производить выплату!</b>`,
