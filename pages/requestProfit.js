@@ -1,4 +1,4 @@
-import { bot, redisClient } from '../index.js';
+import { bot } from '../index.js';
 import { db } from '../db.js';
 
 const requestProfitCaption = userPaypals => {
@@ -17,10 +17,6 @@ const requestProfitOptions = userPaypals => {
       {
         text: `${userPaypal.email}`,
         callback_data: `request_profit_paypal_${userPaypal.email}`,
-        // callback_data: JSON.stringify({
-        //   action: 'rp',
-        //   userPaypal: userPaypal.email,
-        // }),
       },
     ];
   });
