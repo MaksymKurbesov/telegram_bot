@@ -1,8 +1,4 @@
-import { getIbansPage } from './handlers/ibans.js';
 import Redis from 'ioredis';
-
-process.env['NTBA_FIX_350'] = 1;
-
 import TelegramBot from 'node-telegram-bot-api';
 import { checkAntiFloodStatus } from './floodSystem.js';
 import {
@@ -12,7 +8,6 @@ import {
   isChatWithoutCaptcha,
   isEmpty,
   sendCurrentPage,
-  updateAmountInPaymentsChat,
   updateProfitAmount,
   updateProfitName,
 } from './helpers.js';
@@ -20,25 +15,10 @@ import {
 import { sendCaptchaMessage } from './handlers/captcha.js';
 import { db } from './db.js';
 import { getCabinetPage, getFullCabinetPage } from './pages/cabinet.js';
-import { getProfilePage } from './pages/profile.js';
-import { requestProfit } from './pages/requestProfit.js';
-import {
-  continueRequestProfit,
-  profitStatusButtons,
-  requestProfitAmount,
-  requestProfitBill,
-  requestProfitName,
-  requestProfitWallet,
-  submitRequestProfit,
-} from './pages/profitForm.js';
+import { getProfilePage } from './pages/profilePage.js';
+import { submitRequestProfit } from './pages/profitForm.js';
 import { setProfitStatus } from './pages/profitStatus.js';
 import { changePaymentDetails, getPaymentDetails, updatePaymentDetails } from './pages/paymentDetails.js';
-import {
-  requestPaypalByUser,
-  requestTypePaypal,
-  sendPaypalRequest,
-  sendWaitMessage,
-} from './pages/paypalController.js';
 import {
   addEmailsToDataBase,
   cardIn,
@@ -50,22 +30,18 @@ import {
   sendAdminPanel,
   sendMessageToAllUser,
 } from './pages/adminFunctions.js';
-import {
-  ADMIN_PANEL_CHAT_ID,
-  ITEMS_PER_PAGE,
-  PAPA_BOT_CHAT_ID,
-  PAYMENTS_CHAT_ID,
-  STATUS_EMOJI_MAP,
-  STATUS_MAP,
-} from './consts.js';
+import { ADMIN_PANEL_CHAT_ID, ITEMS_PER_PAGE, PAPA_BOT_CHAT_ID, STATUS_EMOJI_MAP, STATUS_MAP } from './consts.js';
 import { profileEntry } from './handlers/profileEntry.js';
-import { renewPaypalValidity, sendPaypalEmailToUser } from './handlers/sendPaypalEmailToUser.js';
-import { getUserProfitsType } from './handlers/getUserProfitsType.js';
-import { getUserProfits } from './handlers/getUserProfits.js';
+import { renewPaypalValidity } from './handlers/sendPaypalEmailToUser.js';
 import { changeNameTag, getNameTag, updateNameTag } from './handlers/nametag.js';
 import { getSupportPage, sendMessageToAdminChat } from './handlers/support.js';
-import { getChats } from './handlers/chats.js';
 import FIREBASE_API from './FIREBASE_API.js';
+import { ProfitController } from './Controllers/ProfitController.js';
+import { PaypalController } from './Controllers/PaypalController.js';
+import { editMessageWithInlineKeyboard } from './NEWhelpers.js';
+import { CHATS_BUTTONS, PROFIT_TYPE_BUTTONS } from './BUTTONS.js';
+
+process.env['NTBA_FIX_350'] = 1;
 
 export const bot = new TelegramBot(process.env.TOKEN_BOT, { polling: true });
 
@@ -80,6 +56,9 @@ const usersPaypalTimeout = {};
 export let adminAddEmailType = null;
 export let adminDeleteEmail = null;
 export let WORK_STATUS = false;
+
+export const profitController = new ProfitController();
+export const paypalController = new PaypalController();
 
 const updatedObjects = {
   amount: {
@@ -163,48 +142,13 @@ const start = async () => {
           await FIREBASE_API.updateUser(request_edit_profit_user_chat_id, { profits: updatedProfits });
         }
 
-        // if (request_edit_profit_type === 'amount') {
-        //   await bot.editMessageText(
-        //     updateAmountInPaymentsChat(editableProfit.paypalType, editableProfit.nametag, text),
-        //     {
-        //       message_id: editableProfit.payment_message_id,
-        //       chat_id: PAYMENTS_CHAT_ID,
-        //       reply_markup: {
-        //         inline_keyboard: [
-        //           [
-        //             {
-        //               text: `${STATUS_EMOJI_MAP[editableProfit.status]} ${editableProfit.status}`,
-        //               callback_data: 'profit_status',
-        //             },
-        //           ],
-        //         ],
-        //       },
-        //       parse_mode: 'HTML',
-        //     }
-        //   );
-        // }
-        //
-        await bot.editMessageCaption(updatedCaption, {
-          chat_id: request_edit_profit_chat_id,
-          message_id: request_edit_profit_message_id,
-          reply_markup: {
-            inline_keyboard: [
-              [
-                {
-                  text: 'Изменить сумму',
-                  callback_data: 'change_profit_amount',
-                },
-              ],
-              [
-                {
-                  text: 'Изменить имя',
-                  callback_data: 'change_profit_name',
-                },
-              ],
-              [{ text: 'Назад', callback_data: 'back_to_profit_status' }],
-            ],
-          },
-        });
+        const buttons = [
+          [{ text: 'Изменить сумму', callback_data: 'change_profit_amount' }],
+          [{ text: 'Изменить имя', callback_data: 'change_profit_name' }],
+          [{ text: 'Назад', callback_data: 'back_to_profit_status' }],
+        ];
+
+        await editMessageWithInlineKeyboard(request_edit_profit_chat_id, request_edit_profit_message_id, updatedCaption, buttons);
 
         await redisClient.hset(`user:${userChatID}`, { request_edit_profit: false });
 
@@ -261,17 +205,17 @@ const start = async () => {
         const photoId = photo[photo.length - 1].file_id;
 
         await bot.deleteMessage(chatId, msg.message_id);
-        return await requestProfitAmount(chatId, msg.message_id, photoId);
+        return await profitController.changeRequestProfitStep(1, chatId, msg.message_id, photoId);
       }
 
       if (form_step === '2') {
         await bot.deleteMessage(chatId, msg.message_id);
-        return await requestProfitName(chatId, msg, text);
+        return await profitController.changeRequestProfitStep(2, chatId, msg.message_id, null, text);
       }
 
       if (form_step === '3') {
         await bot.deleteMessage(chatId, msg.message_id);
-        return await requestProfitWallet(chatId, msg, text);
+        return await profitController.changeRequestProfitStep(3, chatId, msg.message_id, null, text);
       }
 
       if (request_change_nametag === 'true') {
@@ -345,11 +289,13 @@ const start = async () => {
     }
 
     if (data === 'request_iban') {
-      await getIbansPage(chat.id, message_id);
+      await editMessageWithInlineKeyboard(chat.id, message.id, '<b>IBAN на данный момент нет в наличие.</b>', [
+        [{ text: 'Назад', callback_data: 'cabinet' }],
+      ]);
     }
 
     if (data === 'chats') {
-      await getChats(chat.id, message_id);
+      await editMessageWithInlineKeyboard(chat.id, message.id, `<b>Залетай и узнавай всю инфу первым</b>`, CHATS_BUTTONS);
     }
 
     if (data === 'support') {
@@ -388,20 +334,20 @@ const start = async () => {
 
     if (data === 'request_paypal_by_user') {
       if (!usersPaypalTimeout[chat.id]) {
-        await requestPaypalByUser(chat.id, message_id);
+        await paypalController.requestPaypalByUser(chat.id, message_id);
       } else {
-        await sendWaitMessage(chat.id, message_id);
+        await paypalController.sendWaitMessage(chat.id, message_id);
       }
     }
 
     if (data.startsWith('request_paypal_type')) {
       const paypalType = data.split('_')[3];
-      await requestTypePaypal(chat.id, message_id, paypalType);
+      await paypalController.requestPaypalType(chat.id, message_id, paypalType);
     }
 
     if (data.startsWith('paypal_request_amount')) {
       const paypalAmount = data.split('_')[3];
-      await sendPaypalRequest(chat.id, message_id, paypalAmount);
+      await paypalController.sendRequest(chat.id, message_id, paypalAmount);
 
       // usersPaypalTimeout[chat.id] = true;
       //
@@ -411,13 +357,14 @@ const start = async () => {
     }
 
     if (data === 'user_profits') {
-      await getUserProfitsType(chat.id, message_id);
+      await editMessageWithInlineKeyboard(chat.id, message_id, '<b>Выберите тип профитов</b>', PROFIT_TYPE_BUTTONS);
     }
 
     if (data.startsWith('get_user_profits')) {
       try {
         const userProfitsType = data.split('_')[3];
-        await getUserProfits(chat.id, message_id, userProfitsType);
+        // await getUserProfits(chat.id, message_id, userProfitsType);
+        await profitController.getUserProfitsByType(userProfitsType, chat.id, message_id);
       } catch (e) {
         console.log(e, 'data === "get_ukr_user_profits"');
       }
@@ -535,11 +482,7 @@ const start = async () => {
         const action = data.split('_')[3];
         let currentPage = parseInt(data.split('_')[4]);
         const emailsRef = await db.collection('emails');
-        const emailsCountSnap = await emailsRef
-          .where('type', '==', type)
-          .where('status', '==', 'Свободен')
-          .count()
-          .get();
+        const emailsCountSnap = await emailsRef.where('type', '==', type).where('status', '==', 'Свободен').count().get();
         const emailsCount = emailsCountSnap.data().count;
         const totalPage = Math.ceil(emailsCount / ITEMS_PER_PAGE);
 
@@ -580,21 +523,22 @@ const start = async () => {
     }
 
     if (data === 'request_profit') {
-      await requestProfit(chat.id, message_id);
+      await profitController.requestProfit(chat.id, message_id);
+    }
+
+    if (data === 'request_profit_bill') {
+      // await profitController.requestProfitBill(chat.id, message_id);
+      await profitController.changeRequestProfitStep(0, chat.id, message_id);
     }
 
     if (data.startsWith('request_profit_paypal')) {
       const paypalEmail = data.split('_')[3];
 
-      await continueRequestProfit(chat.id, paypalEmail);
-    }
-
-    if (data === 'request_profit_bill') {
-      await requestProfitBill(chat.id, message_id);
+      await profitController.startRequestProfit(chat.id, paypalEmail);
     }
 
     if (data === 'skip_photo:request_profit_amount') {
-      await requestProfitAmount(chat.id, message_id);
+      await profitController.changeRequestProfitStep(1, chat.id, message_id);
     }
 
     ////// FINAL PROFIT STEP /////////
@@ -606,7 +550,7 @@ const start = async () => {
     }
 
     if (data === 'cancel_profit') {
-      await redisClient.hset(`user:${chat.id}`, `request_edit_profit`, false, 'form_step', 0);
+      await redisClient.hset(`user:${chat.id}`, { request_edit_profit: false, form_step: 0 });
       await bot.deleteMessage(chat.id, message_id);
     }
 
@@ -677,7 +621,8 @@ const start = async () => {
     if (data.startsWith('paypal_email_')) {
       const paypalEmail = data.split('_')[2];
 
-      await sendPaypalEmailToUser(paypalEmail, msg, chat.id);
+      // await sendPaypalEmailToUser(paypalEmail, msg.message, chat.id);
+      await paypalController.sendPaypalToUser(paypalEmail, msg.message, chat.id);
     }
 
     if (data === 'correct_captcha') {

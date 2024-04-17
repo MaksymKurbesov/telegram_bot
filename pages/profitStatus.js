@@ -1,8 +1,6 @@
 import { bot, profitMessages, redisClient } from '../index.js';
-import { db } from '../db.js';
 import { PAYMENTS_CHAT_ID, REQUEST_PROFIT_EU_ID, REQUEST_PROFIT_UKR_ID, STATUS_EMOJI_MAP } from '../consts.js';
-import { extractFieldValue, extractValue, getInfoFromMessage } from '../helpers.js';
-import { getUserProfits } from '../handlers/getUserProfits.js';
+import { extractValue, getInfoFromMessage } from '../helpers.js';
 import FIREBASE_API from '../FIREBASE_API.js';
 
 const updateProfitStatus = (message, newStatus, id) => {

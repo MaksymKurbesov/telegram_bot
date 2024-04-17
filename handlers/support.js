@@ -4,17 +4,14 @@ import { ADMIN_PANEL_CHAT_ID } from '../consts.js';
 export const getSupportPage = async (chatId, messageId) => {
   await redisClient.hset(`user:${chatId}`, 'request_support', true);
 
-  await bot.editMessageCaption(
-    `<b>Задайте любой интересующий вас вопрос и наш саппорт свяжется с вами для решение проблемы.</b>`,
-    {
-      chat_id: chatId,
-      message_id: messageId,
-      parse_mode: 'HTML',
-      reply_markup: {
-        inline_keyboard: [[{ text: 'Назад', callback_data: 'cabinet' }]],
-      },
-    }
-  );
+  await bot.editMessageCaption(`<b>Задайте любой интересующий вас вопрос и наш саппорт свяжется с вами для решение проблемы.</b>`, {
+    chat_id: chatId,
+    message_id: messageId,
+    parse_mode: 'HTML',
+    reply_markup: {
+      inline_keyboard: [[{ text: 'Назад', callback_data: 'cabinet' }]],
+    },
+  });
 };
 
 export const sendMessageToAdminChat = async (chatId, messageId, username, messageText) => {

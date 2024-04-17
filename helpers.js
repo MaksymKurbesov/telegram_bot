@@ -73,10 +73,6 @@ const getEmailButtons = (emails, currentPage, type) => {
       {
         text: email.email,
         callback_data: `paypal_email_${email.email}`,
-        // callback_data: JSON.stringify({
-        //   action: "email_selected",
-        //   email: email.email,
-        // }),
       },
     ]);
   });
@@ -239,9 +235,7 @@ const countEmailsByType = async () => {
 };
 
 const updateAmountInPaymentsChat = (type, user, amount) => {
-  return `${
-    type === 'UKR' ? '🇺🇦' : '🇪🇺'
-  } Paypal: <b>${type}</b>\n👤 Пользователь: <b>${user}</b>\n💶 Сумма: <b>${amount}€</b>`;
+  return `${type === 'UKR' ? '🇺🇦' : '🇪🇺'} Paypal: <b>${type}</b>\n👤 Пользователь: <b>${user}</b>\n💶 Сумма: <b>${amount}€</b>`;
 };
 
 export {

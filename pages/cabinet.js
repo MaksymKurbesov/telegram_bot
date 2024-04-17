@@ -1,16 +1,16 @@
-import { MAIN_IMAGE } from "../consts.js";
-import { db } from "../db.js";
-import { bot } from "../index.js";
+import { MAIN_IMAGE } from '../consts.js';
+import { db } from '../db.js';
+import { bot } from '../index.js';
 
-const cabinetCaption = (userData) => {
+const cabinetCaption = userData => {
   const { nickname, profits, teamTopProfit } = userData;
 
   const totalProfitsAmount = profits
-    .filter((profit) => profit.status === "ВЫПЛАЧЕНО!")
+    .filter(profit => profit.status === 'ВЫПЛАЧЕНО!')
     .reduce((sum, profit) => sum + profit.amount, 0);
 
   const personalTopProfit = profits
-    .filter((profit) => profit.status === "ВЫПЛАЧЕНО!")
+    .filter(profit => profit.status === 'ВЫПЛАЧЕНО!')
     .reduce((max, profit) => {
       return max === null || profit.amount > max.amount ? profit : max;
     }, null);
@@ -19,59 +19,57 @@ const cabinetCaption = (userData) => {
 Кабинет: <b>${nickname}</b>\n 
 🗂 Количество профитов: <b>${profits.length} шт</b>.
 💶 Общая сумма профитов: <b>${totalProfitsAmount}€</b>
-💶 Личный топ профит: <b>${
-    personalTopProfit ? personalTopProfit.amount : 0
-  }€</b>
+💶 Личный топ профит: <b>${personalTopProfit ? personalTopProfit.amount : 0}€</b>
     `;
 };
 
-const cabinetOptions = (userData) => {
+const cabinetOptions = userData => {
   return {
     caption: cabinetCaption(userData),
     reply_markup: {
       inline_keyboard: [
-        [{ text: "Профиль 🪪", callback_data: "profile" }],
+        [{ text: 'Профиль 🪪', callback_data: 'profile' }],
         [
           {
-            text: "Взять PayPal 🅿️",
-            callback_data: "request_paypal_by_user",
+            text: 'Взять PayPal 🅿️',
+            callback_data: 'request_paypal_by_user',
           },
           {
-            text: "Взять IBAN 💳",
-            callback_data: "request_iban",
+            text: 'Взять IBAN 💳',
+            callback_data: 'request_iban',
           },
         ],
         [
           {
-            text: "Support 🆘",
-            callback_data: "support",
+            text: 'Support 🆘',
+            callback_data: 'support',
           },
           {
-            text: "Чаты 💬",
-            callback_data: "chats",
+            text: 'Чаты 💬',
+            callback_data: 'chats',
           },
         ],
       ],
     },
-    parse_mode: "HTML",
+    parse_mode: 'HTML',
   };
 };
 
-const getFullCabinetPage = async (chatID) => {
-  const userRef = await db.collection("users").doc(chatID);
+const getFullCabinetPage = async chatID => {
+  const userRef = await db.collection('users').doc(`${chatID}`);
   const userDoc = await userRef.get();
 
   await bot.sendPhoto(chatID, MAIN_IMAGE, cabinetOptions(userDoc.data()));
 };
 
 const getCabinetPage = async (chatID, messageID) => {
-  const userRef = await db.collection("users").doc(`${chatID}`);
+  const userRef = await db.collection('users').doc(`${chatID}`);
   const userDoc = await userRef.get();
 
   await bot.editMessageCaption(cabinetCaption(userDoc.data()), {
     chat_id: chatID,
     message_id: messageID,
-    parse_mode: "HTML",
+    parse_mode: 'HTML',
     reply_markup: cabinetOptions(userDoc.data()).reply_markup,
   });
 };

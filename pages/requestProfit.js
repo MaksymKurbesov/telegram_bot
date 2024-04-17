@@ -11,28 +11,28 @@ const requestProfitCaption = userPaypals => {
   return `<b>🅿️ Ваши PayPal:</b>\n\n${userPaypalsStr}`;
 };
 
-const requestProfitOptions = userPaypals => {
-  const userPaypalsButtons = userPaypals.map(userPaypal => {
-    return [
-      {
-        text: `${userPaypal.email}`,
-        callback_data: `request_profit_paypal_${userPaypal.email}`,
-      },
-    ];
-  });
-
-  return {
-    inline_keyboard: [
-      ...userPaypalsButtons,
-      [
-        {
-          text: `Назад`,
-          callback_data: 'cabinet',
-        },
-      ],
-    ],
-  };
-};
+// const generateButtonsFromUserPaypals = userPaypals => {
+//   const userPaypalsButtons = userPaypals.map(userPaypal => {
+//     return [
+//       {
+//         text: `${userPaypal.email}`,
+//         callback_data: `request_profit_paypal_${userPaypal.email}`,
+//       },
+//     ];
+//   });
+//
+//   return {
+//     inline_keyboard: [
+//       ...userPaypalsButtons,
+//       [
+//         {
+//           text: `Назад`,
+//           callback_data: 'cabinet',
+//         },
+//       ],
+//     ],
+//   };
+// };
 
 const requestProfit = async (chatID, messageID) => {
   try {
@@ -43,7 +43,7 @@ const requestProfit = async (chatID, messageID) => {
       chat_id: chatID,
       message_id: messageID,
       parse_mode: 'HTML',
-      reply_markup: requestProfitOptions(paypals),
+      reply_markup: generateButtonsFromUserPaypals(paypals),
     });
   } catch (e) {
     console.log(e, '(data === "request_profit")');
