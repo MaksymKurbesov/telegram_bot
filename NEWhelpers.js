@@ -6,7 +6,7 @@ export const editMessageWithInlineKeyboard = async (chatId, messageId, text, but
     row.map(button => ({
       text: button.text,
       callback_data: button.callback_data,
-    })),
+    }))
   );
 
   // Объект настроек для bot.editMessageCaption
@@ -39,6 +39,18 @@ export const editMessageText = async (chatId, messageId, text, buttons, parseMod
     },
     parse_mode: parseMode,
   });
+};
+
+export const editMessageReplyMarkup = async (chatId, messageId, buttons) => {
+  await bot.editMessageReplyMarkup(
+    {
+      inline_keyboard: buttons,
+    },
+    {
+      chat_id: chatId,
+      message_id: messageId,
+    }
+  );
 };
 
 export const sendPhotoWithInlineKeyboard = async (chatId, photo, caption, buttons, parseMode = 'HTML') => {

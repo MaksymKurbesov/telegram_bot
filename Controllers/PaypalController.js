@@ -1,7 +1,7 @@
 import { editMessageWithInlineKeyboard, sendMessageWithInlineKeyboard } from '../NEWhelpers.js';
 import { bot, redisClient, renewPaypalUserState } from '../index.js';
 import { db } from '../db.js';
-import { REQUEST_PAYPAL_EU_ID, REQUEST_PAYPAL_UKR_ID } from '../consts.js';
+import { REQUEST_PAYPAL_EU_ID, REQUEST_PAYPAL_UKR_ID, REQUEST_PROFIT_EU_ID, REQUEST_PROFIT_UKR_ID } from '../consts.js';
 import { getEmailButtons } from '../helpers.js';
 import { FieldValue } from 'firebase-admin/firestore';
 import { BACK_TO_CABINET_BUTTON, FF_PAYPAL_BUTTONS, PAYPAL_TYPE_BUTTONS, UKR_PAYPAL_BUTTONS } from '../BUTTONS.js';

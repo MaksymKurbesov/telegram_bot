@@ -64,6 +64,13 @@ const sendCurrentPage = async (chatId, messageId, page, items, type) => {
   }
 };
 
+export const generateDateString = () => {
+  const localDate = new Date().toLocaleDateString('ru-RU');
+  const localTime = new Date().toLocaleTimeString('ru-RU');
+
+  return `${localTime} ${localDate}`;
+};
+
 const getEmailButtons = (emails, currentPage, type) => {
   let buttons = [];
   let pageEmails = emails.slice(currentPage * ITEMS_PER_PAGE, (currentPage + 1) * ITEMS_PER_PAGE);

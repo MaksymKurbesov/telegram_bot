@@ -97,6 +97,20 @@ export const WALLET_BUTTONS = [
   [{ text: 'Отмена', callback_data: 'cancel_profit' }],
 ];
 
+export const DEFAULT_PROFIT_STATUS_BUTTONS = [[{ text: 'Ожидание 🕐', callback_data: 'profit_status' }]];
+
+export const ON_PAYPAL_PROFIT_STATUS_BUTTONS = [[{ text: '🟢 НА ПАЛКЕ!', callback_data: 'status' }]];
+
+export const DELETE_MESSAGE_BUTTON = [[{ text: 'Закрыть ❌', callback_data: 'delete_message' }]];
+
+export const BACK_TO_PROFIT_STATUS_BUTTON = [[{ text: 'Назад', callback_data: 'back_to_profit_status' }]];
+
+export const EDIT_PROFIT_BUTTONS = [
+  [{ text: 'Изменить сумму', callback_data: 'change_profit_amount' }],
+  [{ text: 'Изменить имя', callback_data: 'change_profit_name' }],
+  [{ text: 'Назад', callback_data: 'back_to_profit_status' }],
+];
+
 export const PROFIT_STATUS_BUTTONS = [
   [
     { text: '🟢 НА ПАЛКЕ!', callback_data: 'profit-status-money_on_paypal' },

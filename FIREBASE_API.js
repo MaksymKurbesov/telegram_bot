@@ -1,24 +1,64 @@
 import { db } from './db.js';
+import { FirebaseApi } from './index.js';
 
-const addUser = async (userInfo, userId) => {
-  await db.collection('users').doc(`${userId}`).set(userInfo);
-};
+export class FirebaseAPI {
+  constructor() {}
 
-const getUser = async userId => {
-  return await db.collection('users').doc(`${userId}`).get();
-};
+  async getUserDoc(userId) {
+    return db.collection('users').doc(`${userId}`);
+  }
 
-const updateUser = async (userId, data) => {
-  const userDoc = await db.collection('users').doc(`${userId}`);
+  async addUser(userInfo, userId) {
+    const userDoc = await this.getUserDoc(userId);
+    await userDoc.set(userInfo);
+  }
 
-  await userDoc.update(data);
-};
+  async getUser(userId) {
+    const userDoc = await this.getUserDoc(userId);
+    return await userDoc.get();
+  }
 
-const getUserProfits = async userId => {
-  const userDoc = await db.collection('users').doc(`${userId}`);
-  const userData = await userDoc.get();
+  async updateUser(userId, data) {
+    const userDoc = await this.getUserDoc(userId);
+    await userDoc.update(data);
+  }
 
-  return userData.data().profits;
-};
+  async getUserWalletNumber(userId, wallet) {
+    const userData = await this.getUser(userId);
 
-export default { addUser, getUser, updateUser, getUserProfits };
+    return userData.data()[wallet];
+  }
+
+  async removePaypalFromUser(userId, email) {
+    const user = await this.getUser(userId);
+    const userData = user.data();
+    const paypals = userData.paypals || [];
+    const newPaypals = paypals.filter(paypal => paypal.email !== email);
+
+    const userDoc = await this.getUserDoc(userId);
+    await userDoc.update({ paypals: newPaypals });
+  }
+
+  async addProfit(userId, profit) {
+    const userData = await this.getUser(userId);
+    const profits = userData.data().profits || [];
+
+    profits.push(profit);
+    const userDoc = await this.getUserDoc(userId);
+    await userDoc.update({ profits });
+  }
+
+  async updateProfitStatus(userId, profitId, status) {
+    const userProfits = await FirebaseApi.getUserProfits(userId);
+
+    const profitToUpdate = userProfits.find(profit => profit.id === profitId);
+    profitToUpdate.status = status;
+
+    await FirebaseApi.updateUser(userId, { profits: userProfits });
+  }
+
+  async getUserProfits(userId) {
+    const userData = await this.getUser(userId);
+    return userData.data().profits;
+  }
+}

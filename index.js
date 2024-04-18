@@ -16,8 +16,6 @@ import { sendCaptchaMessage } from './handlers/captcha.js';
 import { db } from './db.js';
 import { getCabinetPage, getFullCabinetPage } from './pages/cabinet.js';
 import { getProfilePage } from './pages/profilePage.js';
-import { submitRequestProfit } from './pages/profitForm.js';
-import { setProfitStatus } from './pages/profitStatus.js';
 import { changePaymentDetails, getPaymentDetails, updatePaymentDetails } from './pages/paymentDetails.js';
 import {
   addEmailsToDataBase,
@@ -30,16 +28,16 @@ import {
   sendAdminPanel,
   sendMessageToAllUser,
 } from './pages/adminFunctions.js';
-import { ADMIN_PANEL_CHAT_ID, ITEMS_PER_PAGE, PAPA_BOT_CHAT_ID, STATUS_EMOJI_MAP, STATUS_MAP } from './consts.js';
+import { ADMIN_PANEL_CHAT_ID, ITEMS_PER_PAGE, PAPA_BOT_CHAT_ID, STATUS_MAP } from './consts.js';
 import { profileEntry } from './handlers/profileEntry.js';
 import { renewPaypalValidity } from './handlers/sendPaypalEmailToUser.js';
 import { changeNameTag, getNameTag, updateNameTag } from './handlers/nametag.js';
 import { getSupportPage, sendMessageToAdminChat } from './handlers/support.js';
-import FIREBASE_API from './FIREBASE_API.js';
 import { ProfitController } from './Controllers/ProfitController.js';
 import { PaypalController } from './Controllers/PaypalController.js';
 import { editMessageWithInlineKeyboard } from './NEWhelpers.js';
-import { CHATS_BUTTONS, PROFIT_TYPE_BUTTONS } from './BUTTONS.js';
+import { CHATS_BUTTONS, PROFIT_STATUS_BUTTONS, PROFIT_TYPE_BUTTONS } from './BUTTONS.js';
+import { FirebaseAPI } from './FIREBASE_API.js';
 
 process.env['NTBA_FIX_350'] = 1;
 
@@ -59,6 +57,7 @@ export let WORK_STATUS = false;
 
 export const profitController = new ProfitController();
 export const paypalController = new PaypalController();
+export const FirebaseApi = new FirebaseAPI();
 
 const updatedObjects = {
   amount: {
@@ -116,7 +115,7 @@ const start = async () => {
           return profit.id === profitId.split('#')[1];
         });
 
-        const userProfits = await FIREBASE_API.getUserProfits(request_edit_profit_user_chat_id);
+        const userProfits = await FirebaseApi.getUserProfits(request_edit_profit_user_chat_id);
 
         if (request_edit_profit_type === 'amount') {
           const updatedProfits = updateProfitAmount(userProfits, correctProfitId, text);
@@ -127,7 +126,7 @@ const start = async () => {
             profitInCache.amount = text;
           }
 
-          await FIREBASE_API.updateUser(request_edit_profit_user_chat_id, { profits: updatedProfits });
+          await FirebaseApi.updateUser(request_edit_profit_user_chat_id, { profits: updatedProfits });
         }
 
         if (request_edit_profit_type === 'name') {
@@ -139,7 +138,7 @@ const start = async () => {
             profitInCache.name = text;
           }
 
-          await FIREBASE_API.updateUser(request_edit_profit_user_chat_id, { profits: updatedProfits });
+          await FirebaseApi.updateUser(request_edit_profit_user_chat_id, { profits: updatedProfits });
         }
 
         const buttons = [
@@ -215,7 +214,7 @@ const start = async () => {
 
       if (form_step === '3') {
         await bot.deleteMessage(chatId, msg.message_id);
-        return await profitController.changeRequestProfitStep(3, chatId, msg.message_id, null, text);
+        return await profitController.changeRequestProfitStep(3, chatId, msg.message_id, null, null, text);
       }
 
       if (request_change_nametag === 'true') {
@@ -423,7 +422,7 @@ const start = async () => {
 
     if (data === 'back_to_profit_status') {
       await bot.editMessageReplyMarkup(
-        { inline_keyboard: profitStatusButtons() },
+        { inline_keyboard: PROFIT_STATUS_BUTTONS },
         {
           chat_id: chat.id,
           message_id: message_id,
@@ -435,33 +434,13 @@ const start = async () => {
 
     if (data.startsWith('profit-status')) {
       const status = data.split('-')[2];
-
-      await bot.editMessageReplyMarkup(
-        {
-          inline_keyboard: [
-            [
-              {
-                text: `${STATUS_EMOJI_MAP[STATUS_MAP[status]]} ${STATUS_MAP[status]}`,
-                callback_data: `confirm-status-${status}`,
-              },
-              {
-                text: 'Отмена',
-                callback_data: 'back_to_profit_status',
-              },
-            ],
-          ],
-        },
-        {
-          chat_id: chat.id,
-          message_id: message_id,
-        }
-      );
+      await profitController.initUpdateProfitStatus(chat.id, message_id, status);
     }
 
     if (data.startsWith('confirm-status')) {
       const status = STATUS_MAP[data.split('-')[2]];
 
-      await setProfitStatus(status, message, chat.id, msg.from.id);
+      await profitController.updateProfitStatus(status, message, chat.id, msg.from.id);
     }
 
     if (data === 'delete_message') {
@@ -545,8 +524,9 @@ const start = async () => {
 
     if (data.startsWith('request_profit_wallet')) {
       const wallet = data.split('_')[3];
+      return await profitController.sendRequestProfit(chat.id, wallet);
 
-      return await submitRequestProfit(chat.id, message, wallet);
+      // return await submitRequestProfit(chat.id, message, wallet);
     }
 
     if (data === 'cancel_profit') {

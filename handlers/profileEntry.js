@@ -1,15 +1,14 @@
 import { generateUser } from '../helpers.js';
 import { getFullCabinetPage } from '../pages/cabinet.js';
-import { redisClient } from '../index.js';
-import FIREBASE_API from '../FIREBASE_API.js';
+import { FirebaseApi, redisClient } from '../index.js';
 
 export const profileEntry = async (username, chatId) => {
   try {
-    const userData = FIREBASE_API.getUser(chatId);
+    const userData = FirebaseApi.getUser(chatId);
 
     if (!userData.exists) {
       const user = generateUser(chatId, username);
-      await FIREBASE_API.addUser(user, chatId);
+      await FirebaseApi.addUser(user, chatId);
 
       await redisClient.hset(`user:${chatId}`, user);
     } else {
