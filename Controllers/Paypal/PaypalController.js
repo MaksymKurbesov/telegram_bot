@@ -1,15 +1,11 @@
-import { editMessageWithInlineKeyboard, sendMessageWithInlineKeyboard } from '../NEWhelpers.js';
-import { bot, redisClient, renewPaypalUserState } from '../index.js';
-import { db } from '../db.js';
-import { REQUEST_PAYPAL_EU_ID, REQUEST_PAYPAL_UKR_ID, REQUEST_PROFIT_EU_ID, REQUEST_PROFIT_UKR_ID } from '../consts.js';
-import { getEmailButtons } from '../helpers.js';
+import { editMessageWithInlineKeyboard, sendMessage } from '../../NEWhelpers.js';
+import { bot, redisClient, renewPaypalUserState } from '../../index.js';
+import { db } from '../../db.js';
+import { REQUEST_PAYPAL_EU_ID, REQUEST_PAYPAL_UKR_ID } from '../../consts.js';
+import { getEmailButtons } from '../../helpers.js';
 import { FieldValue } from 'firebase-admin/firestore';
-import { BACK_TO_CABINET_BUTTON, FF_PAYPAL_BUTTONS, PAYPAL_TYPE_BUTTONS, UKR_PAYPAL_BUTTONS } from '../BUTTONS.js';
-
-export const PAYPAL_MAP = {
-  ukr: 'UKR',
-  ff: 'F/F',
-};
+import { BACK_TO_CABINET_BUTTON, FF_PAYPAL_BUTTONS, PAYPAL_TYPE_BUTTONS, UKR_PAYPAL_BUTTONS } from '../../BUTTONS.js';
+import { PAYPAL_MAP } from './helpers.js';
 
 export class PaypalController {
   constructor() {}
@@ -35,7 +31,7 @@ export class PaypalController {
       chatId,
       messageId,
       '<b>🅿️ ПАЛКИ!</b>\n\n<b>PayPal UKR!</b>\nВаш процент: <b>70%</b>\n\n<b>PayPal EU F/F!</b>\nВаш процент: <b>70%</b>',
-      PAYPAL_TYPE_BUTTONS
+      PAYPAL_TYPE_BUTTONS,
     );
   }
 
@@ -69,12 +65,12 @@ export class PaypalController {
 
     const emailButtons = getEmailButtons(availablePaypals, 0, PAYPAL_MAP[paypalType]);
 
-    await sendMessageWithInlineKeyboard(
+    await sendMessage(
       requestChatId,
       `<b>REQUEST ${PAYPAL_MAP[paypalType]}!</b>\n\n\n💶 Sum: <b>${amount}€</b>\n👤 User: <b>${chatId}</b>\n🪪 Nametag: ${
         userData.data().nametag
       }`,
-      emailButtons
+      emailButtons,
     );
   }
 

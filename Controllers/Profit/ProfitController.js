@@ -1,13 +1,20 @@
-import { db } from '../db.js';
-import { extractValue, generateDateString, generateUniqueID, getInfoFromMessage, sendCurrentPage } from '../helpers.js';
-import { FirebaseApi, paypalController, profitController, redisClient } from '../index.js';
+import { db } from '../../db.js';
+import {
+  extractFieldValue,
+  extractValue,
+  generateDateString,
+  generateUniqueID,
+  getInfoFromMessage,
+  sendCurrentPage,
+} from '../../helpers.js';
+import { FirebaseApi, paypalController, profitController, redisClient } from '../../index.js';
 import {
   editMessageReplyMarkup,
   editMessageText,
   editMessageWithInlineKeyboard,
-  sendMessageWithInlineKeyboard,
+  sendMessage,
   sendPhotoWithInlineKeyboard,
-} from '../NEWhelpers.js';
+} from '../../NEWhelpers.js';
 import {
   BACK_TO_PROFIT_STATUS_BUTTON,
   DEFAULT_PROFIT_STATUS_BUTTONS,
@@ -16,54 +23,18 @@ import {
   ON_PAYPAL_PROFIT_STATUS_BUTTONS,
   PROFIT_STATUS_BUTTONS,
   WALLET_BUTTONS,
-} from '../BUTTONS.js';
-import { NO_IMAGE, PAYMENTS_CHAT_ID, REQUEST_PROFIT_EU_ID, REQUEST_PROFIT_UKR_ID, STATUS_EMOJI_MAP, STATUS_MAP } from '../consts.js';
-
-export const REQUEST_PROFIT_CHATS = {
-  ukr: REQUEST_PROFIT_UKR_ID,
-  ff: REQUEST_PROFIT_EU_ID,
-};
-
-export const PROFIT_TYPE_EMOJI = {
-  ukr: `🇺🇦`,
-  ff: `🇪🇺`,
-};
-
-const updateProfitStatus = (message, newStatus, id) => {
-  const regex = /(\s\S+ Текущий статус профита: )[^\n]+/;
-  const updatedStatus = message.replace(regex, `\n${STATUS_EMOJI_MAP[newStatus]} Текущий статус профита: ${newStatus}`);
-  return updatedStatus.replace(/payment_message_id: .*/, 'payment_message_id: ' + id);
-};
-
-const generateStatusMessage = (profitId, status, payment_message_id) => {
-  const baseMessage = `<b>ℹ️ Статус профита #${profitId}:\n\n${STATUS_EMOJI_MAP[status]} ${status}</b>`;
-  const additionalMessage =
-    status && payment_message_id === 'НА ПАЛКЕ!'
-      ? `\n\nСсылка на профит в чате выплат: https://t.me/c/2017066381/${payment_message_id}`
-      : '';
-
-  return baseMessage + additionalMessage;
-};
-
-const generateCaptionFromUserPaypals = userPaypals => {
-  const userPaypalsStr = userPaypals
-    .map(userPaypal => {
-      return `<b>${userPaypal.type}</b> | ${userPaypal.email} | На сумму: ${userPaypal.limit}`;
-    })
-    .join('\n');
-
-  return `<b>🅿️ Ваши PayPal:</b>\n\n${userPaypalsStr}`;
-};
-
-const generateButtonsFromUserPaypals = userPaypals => {
-  const buttons = userPaypals.map(paypal => [{ text: `${paypal.email}`, callback_data: `request_profit_paypal_${paypal.email}` }]);
-  buttons.push([{ text: `Назад`, callback_data: 'cabinet' }]);
-  return buttons;
-};
-
-const updateCaption = (request_paypal_type, request_profit_paypalEmail, text) => {
-  return `<b>Оформление профита на PayPal ${request_paypal_type.toUpperCase()}:\n\n${request_profit_paypalEmail}\n\n${text}!</b>`;
-};
+} from '../../BUTTONS.js';
+import { NO_IMAGE, PAYMENTS_CHAT_ID, STATUS_EMOJI_MAP, STATUS_MAP } from '../../consts.js';
+import {
+  generateButtonsFromUserPaypals,
+  generateCaptionFromUserPaypals,
+  generateStatusMessage,
+  getUpdateProfitTextByType,
+  PROFIT_TYPE_EMOJI,
+  REQUEST_PROFIT_CHATS,
+  updateCaption,
+  updateProfitStatus,
+} from './helpers.js';
 
 export class ProfitController {
   constructor() {}
@@ -97,7 +68,7 @@ export class ProfitController {
         [{ text: 'Отмена', callback_data: 'cancel_profit' }],
       ];
 
-      const sentMessage = await sendMessageWithInlineKeyboard(chatId, `<b>Оформление профита на PayPal:\n\n${paypalEmail}</b>`, buttons);
+      const sentMessage = await sendMessage(chatId, `<b>Оформление профита на PayPal:\n\n${paypalEmail}</b>`, buttons);
 
       await redisClient.hset(`user:${chatId}`, {
         request_profit_paypalEmail: paypalEmail,
@@ -135,7 +106,7 @@ export class ProfitController {
           const updatedCaption3 = updateCaption(
             request_paypal_type,
             request_profit_paypalEmail,
-            'Введите имя отправителя или вашу товарку'
+            'Введите имя отправителя или вашу товарку',
           );
           await redisClient.hset(`user:${chatId}`, { request_profit_amount: amount });
           await editMessageText(chatId, profit_message_id, updatedCaption3, cancelButtons);
@@ -144,7 +115,7 @@ export class ProfitController {
           const updatedCaption4 = updateCaption(
             request_paypal_type,
             request_profit_paypalEmail,
-            'Укажите на какой кошелёк производить выплату'
+            'Укажите на какой кошелёк производить выплату',
           );
           await redisClient.hset(`user:${chatId}`, { request_profit_name: name });
           await editMessageText(chatId, profit_message_id, updatedCaption4, WALLET_BUTTONS);
@@ -183,7 +154,7 @@ export class ProfitController {
         chatId,
         profit_message_id,
         `💸 <b>Профит PayPal ${request_paypal_type}!</b>\n\n🗂<b>Айди профита:</b> #${profitID}\n\n${request_profit_paypalEmail}\n<b>Сумма:</b> ${request_profit_amount}€\n<b>Имя:</b> ${request_profit_name}\n\n<b>Дата:</b> ${timestamp}`,
-        DEFAULT_PROFIT_STATUS_BUTTONS
+        DEFAULT_PROFIT_STATUS_BUTTONS,
       );
 
       const profit = {
@@ -243,7 +214,7 @@ export class ProfitController {
       if (status === 'НА ПАЛКЕ!') {
         const caption = `${PROFIT_TYPE_EMOJI[paypalType]} Paypal: <b>${paypalType}</b>\n👤 Пользователь: <b>${nametag}</b>\n💶 Сумма: <b>${amount}</b>`;
 
-        const sentMessageInPaymentChat = await sendMessageWithInlineKeyboard(PAYMENTS_CHAT_ID, caption, ON_PAYPAL_PROFIT_STATUS_BUTTONS);
+        const sentMessageInPaymentChat = await sendMessage(PAYMENTS_CHAT_ID, caption, ON_PAYPAL_PROFIT_STATUS_BUTTONS);
 
         await redisClient.hset(`user:${adminID}`, { request_edit_profit_payment_message_id: sentMessageInPaymentChat.message_id });
       }
@@ -268,7 +239,7 @@ export class ProfitController {
 
       // send message in user chat
       const statusMessage = generateStatusMessage(profitId, status, payment_message_id);
-      await sendMessageWithInlineKeyboard(user_chat_id, statusMessage, DELETE_MESSAGE_BUTTON);
+      await sendMessage(user_chat_id, statusMessage, DELETE_MESSAGE_BUTTON);
 
       // edit profit in profit channel
       const requestProfitChatId = REQUEST_PROFIT_CHATS[paypalType];
@@ -286,6 +257,24 @@ export class ProfitController {
     } catch (e) {
       console.log(e, 'setProfitStatus');
     }
+  }
+
+  async startEditProfitByAdmin(chatId, updateType, message) {
+    const profitId = extractFieldValue(message.caption, `Профит ID`);
+    const userChatId = extractFieldValue(message.caption, `user_chat_id`);
+
+    const requestProfitData = {
+      request_edit_profit: true,
+      request_edit_profit_type: updateType,
+      request_edit_profit_message_id: message.message_id,
+      request_edit_profit_caption: message.caption,
+      request_edit_profit_user_chat_id: userChatId,
+      request_edit_profit_chat_id: chatId,
+    };
+
+    await redisClient.hset(`user:${userChatId}`, requestProfitData);
+
+    await sendMessage(chatId, getUpdateProfitTextByType(updateType, profitId));
   }
 
   formatProfitMessage(user, chatId, wallet, profitID) {

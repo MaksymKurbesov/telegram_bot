@@ -33,10 +33,10 @@ import { profileEntry } from './handlers/profileEntry.js';
 import { renewPaypalValidity } from './handlers/sendPaypalEmailToUser.js';
 import { changeNameTag, getNameTag, updateNameTag } from './handlers/nametag.js';
 import { getSupportPage, sendMessageToAdminChat } from './handlers/support.js';
-import { ProfitController } from './Controllers/ProfitController.js';
-import { PaypalController } from './Controllers/PaypalController.js';
-import { editMessageWithInlineKeyboard } from './NEWhelpers.js';
-import { CHATS_BUTTONS, PROFIT_STATUS_BUTTONS, PROFIT_TYPE_BUTTONS } from './BUTTONS.js';
+import { ProfitController } from './Controllers/Profit/ProfitController.js';
+import { PaypalController } from './Controllers/Paypal/PaypalController.js';
+import { editMessageReplyMarkup, editMessageWithInlineKeyboard, sendMessage } from './NEWhelpers.js';
+import { CHATS_BUTTONS, EDIT_PROFIT_BUTTONS, PROFIT_STATUS_BUTTONS, PROFIT_TYPE_BUTTONS } from './BUTTONS.js';
 import { FirebaseAPI } from './FIREBASE_API.js';
 
 process.env['NTBA_FIX_350'] = 1;
@@ -60,12 +60,8 @@ export const paypalController = new PaypalController();
 export const FirebaseApi = new FirebaseAPI();
 
 const updatedObjects = {
-  amount: {
-    message: `🟢 Сумма профита успешно изменена!`,
-  },
-  name: {
-    message: `🟢 Имя профита успешно изменено!`,
-  },
+  amount: `🟢 Сумма профита успешно изменена!`,
+  name: `🟢 Имя профита успешно изменено!`,
 };
 
 const start = async () => {
@@ -81,6 +77,8 @@ const start = async () => {
       const { text, chat, photo } = msg;
       const chatId = chat.id;
       const isAdminChat = chatId === Number(ADMIN_PANEL_CHAT_ID);
+
+      console.log(msg, 'msg');
 
       const user = await redisClient.hgetall(`user:${msg.from.id}`);
 
@@ -141,17 +139,16 @@ const start = async () => {
           await FirebaseApi.updateUser(request_edit_profit_user_chat_id, { profits: updatedProfits });
         }
 
-        const buttons = [
-          [{ text: 'Изменить сумму', callback_data: 'change_profit_amount' }],
-          [{ text: 'Изменить имя', callback_data: 'change_profit_name' }],
-          [{ text: 'Назад', callback_data: 'back_to_profit_status' }],
-        ];
-
-        await editMessageWithInlineKeyboard(request_edit_profit_chat_id, request_edit_profit_message_id, updatedCaption, buttons);
+        await editMessageWithInlineKeyboard(
+          request_edit_profit_chat_id,
+          request_edit_profit_message_id,
+          updatedCaption,
+          EDIT_PROFIT_BUTTONS,
+        );
 
         await redisClient.hset(`user:${userChatID}`, { request_edit_profit: false });
 
-        await bot.sendMessage(chatId, updatedObjects[request_edit_profit_type].message);
+        await bot.sendMessage(chatId, updatedObjects[request_edit_profit_type]);
       }
 
       if (isAdminChat && text === '/admin') {
@@ -269,7 +266,7 @@ const start = async () => {
         {
           chat_id: chat.id,
           message_id: message_id,
-        }
+        },
       );
     }
 
@@ -391,43 +388,12 @@ const start = async () => {
     }
 
     if (data.startsWith('change_profit')) {
-      const changeProfitType = data.split('_')[2];
-
-      const profitId = extractFieldValue(message.caption, `Профит ID`);
-      const chatId = extractFieldValue(message.caption, `user_chat_id`);
-
-      const requestProfitData = {
-        request_edit_profit: true,
-        request_edit_profit_type: changeProfitType,
-        request_edit_profit_message_id: message_id,
-        request_edit_profit_caption: message.caption,
-        request_edit_profit_user_chat_id: chatId,
-        request_edit_profit_chat_id: chat.id,
-      };
-
-      await redisClient.hset(`user:${chatId}`, requestProfitData);
-
-      if (changeProfitType === 'amount') {
-        await bot.sendMessage(chat.id, `<b>ℹ️ Укажите новую сумму для профита ${profitId}!</b>`, {
-          parse_mode: 'HTML',
-        });
-      }
-
-      if (changeProfitType === 'name') {
-        await bot.sendMessage(chat.id, `<b>ℹ️ Укажите новое имя для профита ${profitId}!</b>`, {
-          parse_mode: 'HTML',
-        });
-      }
+      const updateType = data.split('_')[2];
+      await profitController.startEditProfitByAdmin(chat.id, updateType, message);
     }
 
     if (data === 'back_to_profit_status') {
-      await bot.editMessageReplyMarkup(
-        { inline_keyboard: PROFIT_STATUS_BUTTONS },
-        {
-          chat_id: chat.id,
-          message_id: message_id,
-        }
-      );
+      await editMessageReplyMarkup(chat.id, message_id, PROFIT_STATUS_BUTTONS);
     }
 
     ///////////////// ADMIN /////////////////
@@ -494,7 +460,7 @@ const start = async () => {
           {
             chat_id: chat.id,
             message_id: message_id,
-          }
+          },
         );
       } catch (e) {
         console.log(e, 'startswith emails page');
@@ -554,7 +520,7 @@ const start = async () => {
           {
             chat_id: chat.id,
             message_id: message_id,
-          }
+          },
         );
       }
     }
@@ -583,7 +549,7 @@ const start = async () => {
           {
             chat_id: chat.id,
             message_id: message_id,
-          }
+          },
         );
       }
     }
