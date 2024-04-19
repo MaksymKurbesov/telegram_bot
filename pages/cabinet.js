@@ -5,9 +5,7 @@ import { bot } from '../index.js';
 const cabinetCaption = userData => {
   const { nickname, profits, teamTopProfit } = userData;
 
-  const totalProfitsAmount = profits
-    .filter(profit => profit.status === 'ВЫПЛАЧЕНО!')
-    .reduce((sum, profit) => sum + profit.amount, 0);
+  const totalProfitsAmount = profits.filter(profit => profit.status === 'ВЫПЛАЧЕНО!').reduce((sum, profit) => sum + profit.amount, 0);
 
   const personalTopProfit = profits
     .filter(profit => profit.status === 'ВЫПЛАЧЕНО!')

@@ -6,8 +6,9 @@ import {
   generateUniqueID,
   getInfoFromMessage,
   sendCurrentPage,
+  updateProperty,
 } from '../../helpers.js';
-import { FirebaseApi, paypalController, profitController, redisClient } from '../../index.js';
+import { bot, FirebaseApi, paypalController, profitController, profitMessages, redisClient } from '../../index.js';
 import {
   editMessageReplyMarkup,
   editMessageText,
@@ -32,6 +33,7 @@ import {
   getUpdateProfitTextByType,
   PROFIT_TYPE_EMOJI,
   REQUEST_PROFIT_CHATS,
+  SUCCESS_EDIT_PROFIT_MESSAGE,
   updateCaption,
   updateProfitStatus,
 } from './helpers.js';
@@ -106,7 +108,7 @@ export class ProfitController {
           const updatedCaption3 = updateCaption(
             request_paypal_type,
             request_profit_paypalEmail,
-            'Введите имя отправителя или вашу товарку',
+            'Введите имя отправителя или вашу товарку'
           );
           await redisClient.hset(`user:${chatId}`, { request_profit_amount: amount });
           await editMessageText(chatId, profit_message_id, updatedCaption3, cancelButtons);
@@ -115,7 +117,7 @@ export class ProfitController {
           const updatedCaption4 = updateCaption(
             request_paypal_type,
             request_profit_paypalEmail,
-            'Укажите на какой кошелёк производить выплату',
+            'Укажите на какой кошелёк производить выплату'
           );
           await redisClient.hset(`user:${chatId}`, { request_profit_name: name });
           await editMessageText(chatId, profit_message_id, updatedCaption4, WALLET_BUTTONS);
@@ -154,7 +156,7 @@ export class ProfitController {
         chatId,
         profit_message_id,
         `💸 <b>Профит PayPal ${request_paypal_type}!</b>\n\n🗂<b>Айди профита:</b> #${profitID}\n\n${request_profit_paypalEmail}\n<b>Сумма:</b> ${request_profit_amount}€\n<b>Имя:</b> ${request_profit_name}\n\n<b>Дата:</b> ${timestamp}`,
-        DEFAULT_PROFIT_STATUS_BUTTONS,
+        DEFAULT_PROFIT_STATUS_BUTTONS
       );
 
       const profit = {
@@ -259,7 +261,7 @@ export class ProfitController {
     }
   }
 
-  async startEditProfitByAdmin(chatId, updateType, message) {
+  async startEditProfitByAdmin(chatId, updateType, message, fromID) {
     const profitId = extractFieldValue(message.caption, `Профит ID`);
     const userChatId = extractFieldValue(message.caption, `user_chat_id`);
 
@@ -270,11 +272,38 @@ export class ProfitController {
       request_edit_profit_caption: message.caption,
       request_edit_profit_user_chat_id: userChatId,
       request_edit_profit_chat_id: chatId,
+      request_edit_profit_from_id: fromID,
     };
 
     await redisClient.hset(`user:${userChatId}`, requestProfitData);
 
     await sendMessage(chatId, getUpdateProfitTextByType(updateType, profitId));
+  }
+
+  async editProfitByAdmin(chatId, text, user) {
+    const { request_edit_profit_type, request_edit_profit_caption, request_edit_profit_message_id, request_edit_profit_chat_id } = user;
+
+    const userChatID = extractFieldValue(request_edit_profit_caption, 'user_chat_id');
+    const profitId = extractFieldValue(request_edit_profit_caption, 'Профит ID').split('#')[1];
+
+    const editedProfitUser = await redisClient.hgetall(`user:${userChatID}`);
+    const userProfits = await FirebaseApi.getUserProfits(editedProfitUser.request_edit_profit_user_chat_id);
+
+    const updatedProfits = updateProperty(userProfits, profitId, request_edit_profit_type, text);
+    let updatedCaption = request_edit_profit_caption.replace(
+      new RegExp(`(${request_edit_profit_type === 'amount' ? 'Сумма' : 'Имя'}:\\s*)[^\\n]+`),
+      '$1' + text + (request_edit_profit_type === 'amount' ? '€' : '')
+    );
+
+    const profitInCache = profitMessages.find(profit => profit.id === profitId);
+    if (profitInCache) {
+      profitInCache[request_edit_profit_type] = text;
+    }
+
+    await FirebaseApi.updateUser(editedProfitUser.request_edit_profit_user_chat_id, { profits: updatedProfits });
+    await editMessageWithInlineKeyboard(request_edit_profit_chat_id, request_edit_profit_message_id, updatedCaption, EDIT_PROFIT_BUTTONS);
+    await redisClient.hset(`user:${userChatID}`, { request_edit_profit: false });
+    await bot.sendMessage(chatId, SUCCESS_EDIT_PROFIT_MESSAGE[request_edit_profit_type]);
   }
 
   formatProfitMessage(user, chatId, wallet, profitID) {

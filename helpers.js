@@ -113,29 +113,13 @@ const isEmpty = obj => {
   return true;
 };
 
-const updateProfitAmount = (array, id, newAmount) => {
+const updateProperty = (array, id, propertyKey, newValue) => {
   // Находим индекс объекта с нужным id
   const index = array.findIndex(item => item.id === id);
 
   if (index !== -1) {
-    // Создаем новый объект с обновленным значением amount
-    const updatedItem = { ...array[index], amount: Number(newAmount) };
-
-    // Возвращаем новый массив с обновленным объектом
-    return [...array.slice(0, index), updatedItem, ...array.slice(index + 1)];
-  } else {
-    // Если объект с таким id не найден, возвращаем исходный массив
-    return array;
-  }
-};
-
-const updateProfitName = (array, id, newName) => {
-  // Находим индекс объекта с нужным id
-  const index = array.findIndex(item => item.id === id);
-
-  if (index !== -1) {
-    // Создаем новый объект с обновленным значением amount
-    const updatedItem = { ...array[index], name: newName };
+    // Создаем новый объект с обновленным значением свойства
+    const updatedItem = { ...array[index], [propertyKey]: newValue };
 
     // Возвращаем новый массив с обновленным объектом
     return [...array.slice(0, index), updatedItem, ...array.slice(index + 1)];
@@ -241,10 +225,6 @@ const countEmailsByType = async () => {
   return typeCounters;
 };
 
-const updateAmountInPaymentsChat = (type, user, amount) => {
-  return `${type === 'UKR' ? '🇺🇦' : '🇪🇺'} Paypal: <b>${type}</b>\n👤 Пользователь: <b>${user}</b>\n💶 Сумма: <b>${amount}€</b>`;
-};
-
 export {
   generateUser,
   generateUniqueID,
@@ -253,10 +233,8 @@ export {
   countEmailsByType,
   isArrayOfEmails,
   isChatWithoutCaptcha,
-  updateProfitAmount,
-  updateProfitName,
+  updateProperty,
   getEmailButtons,
-  updateAmountInPaymentsChat,
   isEmpty,
   extractFieldValue,
   getInfoFromMessage,

@@ -1,16 +1,7 @@
 import Redis from 'ioredis';
 import TelegramBot from 'node-telegram-bot-api';
 import { checkAntiFloodStatus } from './floodSystem.js';
-import {
-  extractFieldValue,
-  getEmailButtons,
-  isArrayOfEmails,
-  isChatWithoutCaptcha,
-  isEmpty,
-  sendCurrentPage,
-  updateProfitAmount,
-  updateProfitName,
-} from './helpers.js';
+import { getEmailButtons, isArrayOfEmails, isChatWithoutCaptcha, isEmpty, sendCurrentPage } from './helpers.js';
 
 import { sendCaptchaMessage } from './handlers/captcha.js';
 import { db } from './db.js';
@@ -35,9 +26,10 @@ import { changeNameTag, getNameTag, updateNameTag } from './handlers/nametag.js'
 import { getSupportPage, sendMessageToAdminChat } from './handlers/support.js';
 import { ProfitController } from './Controllers/Profit/ProfitController.js';
 import { PaypalController } from './Controllers/Paypal/PaypalController.js';
-import { editMessageReplyMarkup, editMessageWithInlineKeyboard, sendMessage } from './NEWhelpers.js';
-import { CHATS_BUTTONS, EDIT_PROFIT_BUTTONS, PROFIT_STATUS_BUTTONS, PROFIT_TYPE_BUTTONS } from './BUTTONS.js';
+import { editMessageReplyMarkup, editMessageWithInlineKeyboard } from './NEWhelpers.js';
+import { CHATS_BUTTONS, PROFIT_STATUS_BUTTONS, PROFIT_TYPE_BUTTONS } from './BUTTONS.js';
 import { FirebaseAPI } from './FIREBASE_API.js';
+import { PaginationController } from './Controllers/Pagination/PaginationController.js';
 
 process.env['NTBA_FIX_350'] = 1;
 
@@ -57,12 +49,8 @@ export let WORK_STATUS = false;
 
 export const profitController = new ProfitController();
 export const paypalController = new PaypalController();
+export const paginationController = new PaginationController();
 export const FirebaseApi = new FirebaseAPI();
-
-const updatedObjects = {
-  amount: `🟢 Сумма профита успешно изменена!`,
-  name: `🟢 Имя профита успешно изменено!`,
-};
 
 const start = async () => {
   await bot.setMyCommands([
@@ -77,78 +65,20 @@ const start = async () => {
       const { text, chat, photo } = msg;
       const chatId = chat.id;
       const isAdminChat = chatId === Number(ADMIN_PANEL_CHAT_ID);
-
-      console.log(msg, 'msg');
-
       const user = await redisClient.hgetall(`user:${msg.from.id}`);
 
-      const {
-        form_step,
-        request_change_nametag,
-        request_support,
-        request_edit_profit,
-        request_edit_profit_type,
-        request_edit_profit_caption,
-        request_edit_profit_message_id,
-        request_edit_profit_chat_id,
-      } = user;
+      const { form_step, request_change_nametag, request_support, request_edit_profit, request_edit_profit_from_id } = user;
+
+      const isProfitCanEdit = request_edit_profit_from_id === msg.from.id.toString() && request_edit_profit === 'true';
+
+      if (isProfitCanEdit) {
+        await profitController.editProfitByAdmin(chatId, text, user);
+      }
 
       if (isAdminChat && text?.startsWith('/all')) {
         const parts = text.split('/all');
         const message = parts[1].trim();
         return await sendMessageToAllUser(message);
-      }
-
-      if (request_edit_profit === 'true') {
-        const userChatID = extractFieldValue(request_edit_profit_caption, 'user_chat_id');
-        const profitId = extractFieldValue(request_edit_profit_caption, 'Профит ID');
-        const correctProfitId = profitId.split('#')[1];
-
-        const editedProfitUser = await redisClient.hgetall(`user:${userChatID}`);
-        const { request_edit_profit_user_chat_id } = editedProfitUser;
-
-        let updatedCaption;
-
-        const profitInCache = profitMessages.find(profit => {
-          return profit.id === profitId.split('#')[1];
-        });
-
-        const userProfits = await FirebaseApi.getUserProfits(request_edit_profit_user_chat_id);
-
-        if (request_edit_profit_type === 'amount') {
-          const updatedProfits = updateProfitAmount(userProfits, correctProfitId, text);
-
-          updatedCaption = request_edit_profit_caption.replace(/(Сумма:\s*)[^\n]+/, '$1' + `${text}€`);
-
-          if (profitInCache) {
-            profitInCache.amount = text;
-          }
-
-          await FirebaseApi.updateUser(request_edit_profit_user_chat_id, { profits: updatedProfits });
-        }
-
-        if (request_edit_profit_type === 'name') {
-          const updatedProfits = updateProfitName(userProfits, correctProfitId, text);
-
-          updatedCaption = request_edit_profit_caption.replace(/(Имя:\s*)[^\n]+/, '$1' + `${text}`);
-
-          if (profitInCache) {
-            profitInCache.name = text;
-          }
-
-          await FirebaseApi.updateUser(request_edit_profit_user_chat_id, { profits: updatedProfits });
-        }
-
-        await editMessageWithInlineKeyboard(
-          request_edit_profit_chat_id,
-          request_edit_profit_message_id,
-          updatedCaption,
-          EDIT_PROFIT_BUTTONS,
-        );
-
-        await redisClient.hset(`user:${userChatID}`, { request_edit_profit: false });
-
-        await bot.sendMessage(chatId, updatedObjects[request_edit_profit_type]);
       }
 
       if (isAdminChat && text === '/admin') {
@@ -266,7 +196,7 @@ const start = async () => {
         {
           chat_id: chat.id,
           message_id: message_id,
-        },
+        }
       );
     }
 
@@ -389,7 +319,7 @@ const start = async () => {
 
     if (data.startsWith('change_profit')) {
       const updateType = data.split('_')[2];
-      await profitController.startEditProfitByAdmin(chat.id, updateType, message);
+      await profitController.startEditProfitByAdmin(chat.id, updateType, message, msg.from.id);
     }
 
     if (data === 'back_to_profit_status') {
@@ -421,50 +351,8 @@ const start = async () => {
       await sendCurrentPage(chat.id, message_id, page, userData.data().profits, type);
     }
 
-    if (data.startsWith('emails_page') || data.startsWith('emails_page')) {
-      try {
-        const type = data.split('_')[2];
-        const action = data.split('_')[3];
-        let currentPage = parseInt(data.split('_')[4]);
-        const emailsRef = await db.collection('emails');
-        const emailsCountSnap = await emailsRef.where('type', '==', type).where('status', '==', 'Свободен').count().get();
-        const emailsCount = emailsCountSnap.data().count;
-        const totalPage = Math.ceil(emailsCount / ITEMS_PER_PAGE);
-
-        if (action === 'next') {
-          currentPage++;
-          if (currentPage >= totalPage) {
-            return;
-          }
-        }
-
-        if (action === 'back') {
-          if (currentPage === 0) {
-            return;
-          } else {
-            currentPage = currentPage > 0 ? currentPage - 1 : 0;
-          }
-        }
-
-        const emails = await emailsRef.where('type', '==', type).where('status', '==', 'Свободен').get();
-
-        const emailsData = emails.docs.map(email => {
-          return email.data();
-        });
-
-        const buttons = getEmailButtons(emailsData, currentPage, type);
-
-        await bot.editMessageReplyMarkup(
-          { inline_keyboard: buttons },
-
-          {
-            chat_id: chat.id,
-            message_id: message_id,
-          },
-        );
-      } catch (e) {
-        console.log(e, 'startswith emails page');
-      }
+    if (data.startsWith('emails_page')) {
+      await paginationController.changePage(chat, message_id, data);
     }
 
     if (data === 'request_profit') {
@@ -472,7 +360,6 @@ const start = async () => {
     }
 
     if (data === 'request_profit_bill') {
-      // await profitController.requestProfitBill(chat.id, message_id);
       await profitController.changeRequestProfitStep(0, chat.id, message_id);
     }
 
@@ -491,8 +378,6 @@ const start = async () => {
     if (data.startsWith('request_profit_wallet')) {
       const wallet = data.split('_')[3];
       return await profitController.sendRequestProfit(chat.id, wallet);
-
-      // return await submitRequestProfit(chat.id, message, wallet);
     }
 
     if (data === 'cancel_profit') {
@@ -520,7 +405,7 @@ const start = async () => {
           {
             chat_id: chat.id,
             message_id: message_id,
-          },
+          }
         );
       }
     }
@@ -549,7 +434,7 @@ const start = async () => {
           {
             chat_id: chat.id,
             message_id: message_id,
-          },
+          }
         );
       }
     }

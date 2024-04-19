@@ -5,13 +5,14 @@ export const REQUEST_PROFIT_CHATS = {
   ff: REQUEST_PROFIT_EU_ID,
 };
 
-export const getUpdateProfitTextByType = (type, profitId) => {
-  return `<b>ℹ️ Укажите ${type === 'amount' ? `новую сумму` : `новое имя`} для профита ${profitId}!</b>`;
-};
-
 export const PROFIT_TYPE_EMOJI = {
   ukr: `🇺🇦`,
   ff: `🇪🇺`,
+};
+
+export const SUCCESS_EDIT_PROFIT_MESSAGE = {
+  amount: `🟢 Сумма профита успешно изменена!`,
+  name: `🟢 Имя профита успешно изменено!`,
 };
 
 export const updateProfitStatus = (message, newStatus, id) => {
@@ -48,4 +49,8 @@ export const generateButtonsFromUserPaypals = userPaypals => {
 
 export const updateCaption = (request_paypal_type, request_profit_paypalEmail, text) => {
   return `<b>Оформление профита на PayPal ${request_paypal_type.toUpperCase()}:\n\n${request_profit_paypalEmail}\n\n${text}!</b>`;
+};
+
+export const getUpdateProfitTextByType = (type, profitId) => {
+  return `<b>ℹ️ Укажите ${type === 'amount' ? `новую сумму` : `новое имя`} для профита ${profitId}!</b>`;
 };
