@@ -111,6 +111,44 @@ export const EDIT_PROFIT_BUTTONS = [
   [{ text: 'Назад', callback_data: 'back_to_profit_status' }],
 ];
 
+export const ADD_PAYPAL_TYPE_BUTTONS = [
+  [
+    { text: 'EU F/F', callback_data: 'add_paypals_ff' },
+    { text: 'UKR', callback_data: 'add_paypals_ukr' },
+  ],
+  [{ text: 'Назад', callback_data: 'admin_panel' }],
+];
+
+export const BACK_TO_ADMIN_PANEL_BUTTON = [[{ text: 'Назад', callback_data: 'admin_panel' }]];
+
+export const CANCEL_ADD_EMAIL_BUTTON = [[{ text: 'Отмена', callback_data: 'cancel_add_email' }]];
+
+export const CARD_IN_BUTTONS = [
+  [
+    { text: 'Выплачено! 💸', callback_data: 'confirm_card_in' },
+    { text: 'Отмена 🔴', callback_data: 'admin_panel' },
+  ],
+];
+
+export const ADMIN_PANEL_BUTTONS = status => {
+  return [
+    [
+      {
+        text: `${status === 'working' ? 'STOP 🛑' : 'WORK ✅'}`,
+        callback_data: `${status === 'working' ? 'stop_work' : 'start_work'}`,
+      },
+    ],
+    [
+      { text: 'Добавить 🅿️', callback_data: 'add_paypals' },
+      { text: 'Удалить 🅿️', callback_data: 'delete_paypal' },
+    ],
+    [
+      { text: 'Касса 🗂️', callback_data: 'card_in' },
+      { text: 'Выплата 💸', callback_data: 'restart_card_in' },
+    ],
+  ];
+};
+
 export const PROFIT_STATUS_BUTTONS = [
   [
     { text: '🟢 НА ПАЛКЕ!', callback_data: 'profit-status-money_on_paypal' },

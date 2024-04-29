@@ -1,35 +1,35 @@
 import Redis from 'ioredis';
 import TelegramBot from 'node-telegram-bot-api';
 import { checkAntiFloodStatus } from './floodSystem.js';
-import { getEmailButtons, isArrayOfEmails, isChatWithoutCaptcha, isEmpty, sendCurrentPage } from './helpers.js';
-
+import { isChatWithoutCaptcha, isEmpty, sendCurrentPage } from './helpers.js';
 import { sendCaptchaMessage } from './handlers/captcha.js';
 import { db } from './db.js';
 import { getCabinetPage, getFullCabinetPage } from './pages/cabinet.js';
 import { getProfilePage } from './pages/profilePage.js';
 import { changePaymentDetails, getPaymentDetails, updatePaymentDetails } from './pages/paymentDetails.js';
-import {
-  addEmailsToDataBase,
-  cardIn,
-  deletePaypal,
-  getAdminPanel,
-  getDeletePaypal,
-  getLoadingPaypalType,
-  loadPaypal,
-  sendAdminPanel,
-  sendMessageToAllUser,
-} from './pages/adminFunctions.js';
-import { ADMIN_PANEL_CHAT_ID, ITEMS_PER_PAGE, PAPA_BOT_CHAT_ID, STATUS_MAP } from './consts.js';
+
+import { ADMIN_PANEL_CHAT_ID, PAPA_BOT_CHAT_ID, STATUS_MAP } from './consts.js';
 import { profileEntry } from './handlers/profileEntry.js';
 import { renewPaypalValidity } from './handlers/sendPaypalEmailToUser.js';
 import { changeNameTag, getNameTag, updateNameTag } from './handlers/nametag.js';
 import { getSupportPage, sendMessageToAdminChat } from './handlers/support.js';
 import { ProfitController } from './Controllers/Profit/ProfitController.js';
 import { PaypalController } from './Controllers/Paypal/PaypalController.js';
-import { editMessageReplyMarkup, editMessageWithInlineKeyboard } from './NEWhelpers.js';
-import { CHATS_BUTTONS, PROFIT_STATUS_BUTTONS, PROFIT_TYPE_BUTTONS } from './BUTTONS.js';
+import { editMessageReplyMarkup, editMessageText, editMessageWithInlineKeyboard } from './NEWhelpers.js';
+import {
+  ADD_PAYPAL_TYPE_BUTTONS,
+  BACK_TO_ADMIN_PANEL_BUTTON,
+  BACK_TO_CABINET_BUTTON,
+  CANCEL_ADD_EMAIL_BUTTON,
+  CARD_IN_BUTTONS,
+  CHATS_BUTTONS,
+  PROFIT_STATUS_BUTTONS,
+  PROFIT_TYPE_BUTTONS,
+} from './BUTTONS.js';
 import { FirebaseAPI } from './FIREBASE_API.js';
 import { PaginationController } from './Controllers/Pagination/PaginationController.js';
+import { AdminController } from './Controllers/AdminController/AdminController.js';
+import { PAYPAL_MAP } from './Controllers/Paypal/helpers.js';
 
 process.env['NTBA_FIX_350'] = 1;
 
@@ -41,16 +41,13 @@ export const renewPaypalUserState = {
   chat_id: ['test@gmail.com'],
 };
 
-export let profitMessages = [];
-const usersPaypalTimeout = {};
-export let adminAddEmailType = null;
 export let adminDeleteEmail = null;
-export let WORK_STATUS = false;
 
 export const profitController = new ProfitController();
 export const paypalController = new PaypalController();
 export const paginationController = new PaginationController();
 export const FirebaseApi = new FirebaseAPI();
+export const adminController = new AdminController();
 
 const start = async () => {
   await bot.setMyCommands([
@@ -67,63 +64,51 @@ const start = async () => {
       const isAdminChat = chatId === Number(ADMIN_PANEL_CHAT_ID);
       const user = await redisClient.hgetall(`user:${msg.from.id}`);
 
-      const { form_step, request_change_nametag, request_support, request_edit_profit, request_edit_profit_from_id } = user;
+      if (isEmpty(user)) return await sendCaptchaMessage(msg);
+
+      // if ((await checkAntiFloodStatus(chatId)) || isChatWithoutCaptcha(chatId)) return;
+
+      const {
+        form_step,
+        request_change_nametag,
+        request_support,
+        request_edit_profit,
+        request_edit_profit_from_id,
+        request_wallet_change,
+        adminAddEmailType,
+        adminId,
+      } = user;
 
       const isProfitCanEdit = request_edit_profit_from_id === msg.from.id.toString() && request_edit_profit === 'true';
+      const isEmailCanBeAdded = adminAddEmailType && adminAddEmailType !== '' && isAdminChat && msg.from.id === Number(adminId);
 
       if (isProfitCanEdit) {
         await profitController.editProfitByAdmin(chatId, text, user);
       }
 
-      if (isAdminChat && text?.startsWith('/all')) {
-        const parts = text.split('/all');
-        const message = parts[1].trim();
-        return await sendMessageToAllUser(message);
+      if (isAdminChat && text.startsWith('/all')) {
+        const messageText = text.split('/all')[1].trim();
+
+        return await adminController.sendMessageToAllUser(messageText);
       }
 
       if (isAdminChat && text === '/admin') {
-        adminAddEmailType = null;
-        adminDeleteEmail = null;
-        return sendAdminPanel(chatId, WORK_STATUS);
+        return await adminController.sendAdminPanel(chatId);
       }
 
-      if (adminDeleteEmail && isAdminChat) {
-        const emailRegex = /^[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,6}$/;
-
-        if (emailRegex.test(text)) {
-          await deletePaypal(text, chatId);
-          adminDeleteEmail = null;
-        }
+      if (isAdminChat && adminDeleteEmail) {
+        await adminController.deletePaypalFromDatabase(text, chatId);
       }
 
-      if (adminAddEmailType && isAdminChat) {
-        const emails = text.split(';');
-
-        if (emails.length === 0 || !isArrayOfEmails(emails)) {
-          return;
-        }
-
-        await addEmailsToDataBase(emails, adminAddEmailType, msg);
-        adminAddEmailType = null;
-      }
-
-      const floodStatus = await checkAntiFloodStatus(chatId);
-
-      if (floodStatus || isChatWithoutCaptcha(chatId)) {
-        return;
-      }
-
-      if (isEmpty(user)) {
-        return await sendCaptchaMessage(msg);
+      if (isEmailCanBeAdded) {
+        await adminController.addPaypalToDatabase(text, adminAddEmailType, chatId, msg.from.id);
       }
 
       if (request_support === 'true') {
         await sendMessageToAdminChat(chat.id, msg.message_id, chat.username, text);
       }
 
-      const isRequestChangeWallet = await redisClient.hget(`user:${chatId}`, 'request_wallet_change');
-
-      if (isRequestChangeWallet === 'true') {
+      if (request_wallet_change === 'true') {
         await updatePaymentDetails(text, chatId, msg.message_id);
       }
 
@@ -168,42 +153,23 @@ const start = async () => {
     }
 
     if (data === 'start_work') {
-      WORK_STATUS = true;
-      await sendMessageToAllUser('<b>Начинаем работу! 💸</b>');
-      await getAdminPanel(chat.id, message_id, WORK_STATUS);
+      await adminController.startWork(chat.id, message_id);
     }
 
     if (data === 'stop_work') {
-      WORK_STATUS = false;
-      await sendMessageToAllUser('<b>Заканчиваем работу! 👹</b>');
-      await getAdminPanel(chat.id, message_id, WORK_STATUS);
+      await adminController.stopWork(chat.id, message_id);
     }
 
     if (data === 'card_in') {
-      await cardIn();
+      await adminController.cardIn();
     }
 
     if (data === 'restart_card_in') {
-      await bot.editMessageReplyMarkup(
-        {
-          inline_keyboard: [
-            [
-              { text: 'Выплачено! 💸', callback_data: 'confirm_card_in' },
-              { text: 'Отмена 🔴', callback_data: 'admin_panel' },
-            ],
-          ],
-        },
-        {
-          chat_id: chat.id,
-          message_id: message_id,
-        }
-      );
+      await editMessageReplyMarkup(chat.id, message_id, CARD_IN_BUTTONS);
     }
 
     if (data === 'confirm_card_in') {
-      profitMessages = [];
-      await bot.sendMessage(chat.id, 'Выплаты сделаны! 👌');
-      await getAdminPanel(chat.id, message_id, WORK_STATUS);
+      await adminController.makeCardIn(chat.id, message_id);
     }
 
     if (data === 'cabinet') {
@@ -215,13 +181,11 @@ const start = async () => {
     }
 
     if (data === 'request_iban') {
-      await editMessageWithInlineKeyboard(chat.id, message.id, '<b>IBAN на данный момент нет в наличие.</b>', [
-        [{ text: 'Назад', callback_data: 'cabinet' }],
-      ]);
+      await editMessageWithInlineKeyboard(chat.id, message_id, '<b>IBAN на данный момент нет в наличие.</b>', BACK_TO_CABINET_BUTTON);
     }
 
     if (data === 'chats') {
-      await editMessageWithInlineKeyboard(chat.id, message.id, `<b>Залетай и узнавай всю инфу первым</b>`, CHATS_BUTTONS);
+      await editMessageWithInlineKeyboard(chat.id, message_id, `<b>Залетай и узнавай всю инфу первым</b>`, CHATS_BUTTONS);
     }
 
     if (data === 'support') {
@@ -259,7 +223,9 @@ const start = async () => {
     }
 
     if (data === 'request_paypal_by_user') {
-      if (!usersPaypalTimeout[chat.id]) {
+      const userPaypalTimeout = await redisClient.get(`user:${chat.id}_request_paypal_timeout`);
+
+      if (!userPaypalTimeout) {
         await paypalController.requestPaypalByUser(chat.id, message_id);
       } else {
         await paypalController.sendWaitMessage(chat.id, message_id);
@@ -273,13 +239,7 @@ const start = async () => {
 
     if (data.startsWith('paypal_request_amount')) {
       const paypalAmount = data.split('_')[3];
-      await paypalController.sendRequest(chat.id, message_id, paypalAmount);
-
-      // usersPaypalTimeout[chat.id] = true;
-      //
-      // setTimeout(() => {
-      //   usersPaypalTimeout[chat.id] = false;
-      // }, 60000);
+      await paypalController.sendRequestByUser(chat.id, message_id, paypalAmount);
     }
 
     if (data === 'user_profits') {
@@ -287,34 +247,36 @@ const start = async () => {
     }
 
     if (data.startsWith('get_user_profits')) {
-      try {
-        const userProfitsType = data.split('_')[3];
-        // await getUserProfits(chat.id, message_id, userProfitsType);
-        await profitController.getUserProfitsByType(userProfitsType, chat.id, message_id);
-      } catch (e) {
-        console.log(e, 'data === "get_ukr_user_profits"');
-      }
+      const userProfitsType = data.split('_')[3];
+      await profitController.getUserProfitsByType(userProfitsType, chat.id, message_id);
     }
 
     ///////////////// ADMIN /////////////////
 
     if (data === 'admin_panel') {
-      await getAdminPanel(chat.id, message_id, WORK_STATUS);
+      await adminController.sendAdminPanel(chat.id, message_id);
     }
 
     if (data === 'add_paypals') {
-      await getLoadingPaypalType(chat.id, message_id);
+      await editMessageText(chat.id, message_id, '<b>Какой тип палки загрузить</b>', ADD_PAYPAL_TYPE_BUTTONS);
     }
 
     if (data.startsWith('add_paypals_')) {
       const paypalType = data.split('_')[2];
-      adminAddEmailType = paypalType === 'f/f' ? 'F/F' : 'UKR';
-      await loadPaypal(paypalType, chat.id, message_id);
+      await redisClient.hset(`user:${msg.from.id}`, { adminAddEmailType: paypalType, adminId: msg.from.id });
+      const captionText = `<b>Загрузка ${PAYPAL_MAP[paypalType]}\n\nУкажите палки в формате\n\n<code>paypal@gmail.com;paypal2@gmail.com;paypayl3@gmail.com</code></b>`;
+
+      await editMessageText(chat.id, message_id, captionText, CANCEL_ADD_EMAIL_BUTTON);
+    }
+
+    if (data === 'cancel_add_email') {
+      await redisClient.hset(`user:${msg.from.id}`, { adminAddEmailType: '', adminId: '' });
+      await adminController.sendAdminPanel(chat.id, message_id);
     }
 
     if (data === 'delete_paypal') {
       adminDeleteEmail = true;
-      await getDeletePaypal(chat.id, message_id);
+      await editMessageText(chat.id, message_id, '<b>Напишите палку которую хотите удалить</b>', BACK_TO_ADMIN_PANEL_BUTTON);
     }
 
     if (data.startsWith('change_profit')) {
@@ -405,7 +367,7 @@ const start = async () => {
           {
             chat_id: chat.id,
             message_id: message_id,
-          }
+          },
         );
       }
     }
@@ -434,7 +396,7 @@ const start = async () => {
           {
             chat_id: chat.id,
             message_id: message_id,
-          }
+          },
         );
       }
     }
@@ -445,14 +407,11 @@ const start = async () => {
 
     if (data.startsWith('change_payment_details')) {
       const wallet = data.split('_')[3];
-
       await changePaymentDetails(chat.id, message_id, wallet);
     }
 
     if (data.startsWith('paypal_email_')) {
       const paypalEmail = data.split('_')[2];
-
-      // await sendPaypalEmailToUser(paypalEmail, msg.message, chat.id);
       await paypalController.sendPaypalToUser(paypalEmail, msg.message, chat.id);
     }
 

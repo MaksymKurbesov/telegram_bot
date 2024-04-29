@@ -5,7 +5,7 @@ import { REQUEST_PAYPAL_EU_ID, REQUEST_PAYPAL_UKR_ID } from '../../consts.js';
 import { getEmailButtons } from '../../helpers.js';
 import { FieldValue } from 'firebase-admin/firestore';
 import { BACK_TO_CABINET_BUTTON, FF_PAYPAL_BUTTONS, PAYPAL_TYPE_BUTTONS, UKR_PAYPAL_BUTTONS } from '../../BUTTONS.js';
-import { PAYPAL_MAP } from './helpers.js';
+import { PAYPAL_MAP, PAYPAL_REQUEST_CHATS_MAP } from './helpers.js';
 
 export class PaypalController {
   constructor() {}
@@ -26,7 +26,6 @@ export class PaypalController {
   async getAvailablePaypalsCount(paypalType) {
     const availablePaypals = await this.getAvailablePaypals(paypalType);
 
-    console.log(availablePaypals.length, 'availablePaypals.length;');
     return availablePaypals.length;
   }
 
@@ -35,7 +34,7 @@ export class PaypalController {
       chatId,
       messageId,
       '<b>🅿️ ПАЛКИ!</b>\n\n<b>PayPal UKR!</b>\nВаш процент: <b>70%</b>\n\n<b>PayPal EU F/F!</b>\nВаш процент: <b>70%</b>',
-      PAYPAL_TYPE_BUTTONS
+      PAYPAL_TYPE_BUTTONS,
     );
   }
 
@@ -57,24 +56,22 @@ export class PaypalController {
     }
   }
 
-  async sendRequest(chatId, messageId, amount) {
+  async sendRequestByUser(chatId, messageId, amount) {
     const userData = await db.collection('users').doc(`${chatId}`).get();
     const paypalType = await redisClient.hget(`user:${chatId}`, 'request_paypal_type');
-    const buttons = [[{ text: 'Назад', callback_data: 'cabinet' }]];
+    const requestChatId = PAYPAL_REQUEST_CHATS_MAP[paypalType];
+    const availablePaypals = await this.getAvailablePaypals(paypalType);
+    const emailButtons = getEmailButtons(availablePaypals, 0, paypalType);
 
-    await editMessageWithInlineKeyboard(chatId, messageId, '<b>Заявка на получение PayPal успешно отправлена!</b>', buttons);
-
-    const requestChatId = paypalType === 'ukr' ? REQUEST_PAYPAL_UKR_ID : REQUEST_PAYPAL_EU_ID;
-    const availablePaypals = await this.getAvailablePaypals(PAYPAL_MAP[paypalType]);
-
-    const emailButtons = getEmailButtons(availablePaypals, 0, PAYPAL_MAP[paypalType]);
+    await redisClient.set(`user:${chatId}_request_paypal_timeout`, 'true', 'EX', 60);
+    await editMessageWithInlineKeyboard(chatId, messageId, '<b>Заявка на получение PayPal успешно отправлена!</b>', BACK_TO_CABINET_BUTTON);
 
     await sendMessage(
       requestChatId,
       `<b>REQUEST ${PAYPAL_MAP[paypalType]}!</b>\n\n\n💶 Sum: <b>${amount}€</b>\n👤 User: <b>${chatId}</b>\n🪪 Nametag: ${
         userData.data().nametag
       }`,
-      emailButtons
+      emailButtons,
     );
   }
 

@@ -1,4 +1,4 @@
-import { bot } from './index.js';
+import { bot, redisClient } from './index.js';
 import {
   ADMIN_PANEL_CHAT_ID,
   ITEMS_PER_PAGE,
@@ -9,7 +9,6 @@ import {
   REQUEST_PROFIT_EU_ID,
   REQUEST_PROFIT_UKR_ID,
 } from './consts.js';
-import { db } from './db.js';
 
 const generateUniqueID = () => {
   const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
@@ -145,6 +144,27 @@ const generateUser = (chatId, nickname) => {
   };
 };
 
+export const getAllUsersFromRedis = async () => {
+  let cursor = '0';
+  const users = [];
+
+  // Повторяем до тех пор, пока cursor не вернётся как '0' (что означает окончание сканирования)
+  do {
+    // Используем scan с указанием cursor и match для ключей
+    const reply = await redisClient.scan(cursor, 'MATCH', 'user:*', 'COUNT', '100');
+    cursor = reply[0]; // Обновляем cursor для следующей итерации
+    const keys = reply[1]; // Получаем список ключей
+
+    // Загружаем данные для каждого ключа
+    for (const key of keys) {
+      const user = await redisClient.hgetall(key);
+      users.push(user); // Добавляем данные пользователя в массив
+    }
+  } while (cursor !== '0');
+
+  return users;
+};
+
 const extractValue = (str, pattern) => {
   let parts = str.split(pattern);
   if (parts.length > 1) {
@@ -204,33 +224,11 @@ const isArrayOfEmails = arr => {
   return Array.isArray(arr) && arr.every(email => emailRegex.test(email));
 };
 
-const countEmailsByType = async () => {
-  // Получение всех email'ов из коллекции
-  const emailsRef = db.collection('emails');
-  const snapshot = await emailsRef.where('status', '==', 'Свободен').get();
-
-  // Инициализация счетчиков для каждого типа
-  let typeCounters = {};
-
-  // Подсчет количества email'ов каждого типа
-  snapshot.forEach(doc => {
-    const { type } = doc.data();
-    if (typeCounters[type]) {
-      typeCounters[type] += 1;
-    } else {
-      typeCounters[type] = 1;
-    }
-  });
-
-  return typeCounters;
-};
-
 export {
   generateUser,
   generateUniqueID,
   sendCurrentPage,
   extractValue,
-  countEmailsByType,
   isArrayOfEmails,
   isChatWithoutCaptcha,
   updateProperty,

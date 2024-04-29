@@ -8,7 +8,7 @@ import {
   sendCurrentPage,
   updateProperty,
 } from '../../helpers.js';
-import { bot, FirebaseApi, paypalController, profitController, profitMessages, redisClient } from '../../index.js';
+import { bot, FirebaseApi, paypalController, redisClient } from '../../index.js';
 import {
   editMessageReplyMarkup,
   editMessageText,
@@ -35,6 +35,7 @@ import {
   REQUEST_PROFIT_CHATS,
   SUCCESS_EDIT_PROFIT_MESSAGE,
   updateCaption,
+  updateObjectInList,
   updateProfitStatus,
 } from './helpers.js';
 
@@ -108,7 +109,7 @@ export class ProfitController {
           const updatedCaption3 = updateCaption(
             request_paypal_type,
             request_profit_paypalEmail,
-            'Введите имя отправителя или вашу товарку'
+            'Введите имя отправителя или вашу товарку',
           );
           await redisClient.hset(`user:${chatId}`, { request_profit_amount: amount });
           await editMessageText(chatId, profit_message_id, updatedCaption3, cancelButtons);
@@ -117,7 +118,7 @@ export class ProfitController {
           const updatedCaption4 = updateCaption(
             request_paypal_type,
             request_profit_paypalEmail,
-            'Укажите на какой кошелёк производить выплату'
+            'Укажите на какой кошелёк производить выплату',
           );
           await redisClient.hset(`user:${chatId}`, { request_profit_name: name });
           await editMessageText(chatId, profit_message_id, updatedCaption4, WALLET_BUTTONS);
@@ -156,7 +157,7 @@ export class ProfitController {
         chatId,
         profit_message_id,
         `💸 <b>Профит PayPal ${request_paypal_type}!</b>\n\n🗂<b>Айди профита:</b> #${profitID}\n\n${request_profit_paypalEmail}\n<b>Сумма:</b> ${request_profit_amount}€\n<b>Имя:</b> ${request_profit_name}\n\n<b>Дата:</b> ${timestamp}`,
-        DEFAULT_PROFIT_STATUS_BUTTONS
+        DEFAULT_PROFIT_STATUS_BUTTONS,
       );
 
       const profit = {
@@ -229,7 +230,7 @@ export class ProfitController {
           type: paypalType,
         };
 
-        await profitController.addProfitToDailyProfits(profit);
+        await this.addProfitToDailyProfits(profit);
       }
 
       if (status === 'ПЕРЕОФОРМИТЬ!') {
@@ -250,7 +251,6 @@ export class ProfitController {
 
       // edit profit in user chat
       const statusButton = [[{ text: `${STATUS_EMOJI_MAP[status]} ${status}`, callback_data: 'profit_status' }]];
-
       await editMessageReplyMarkup(user_chat_id, profit_message_id, statusButton);
 
       if (payment_message_id) {
@@ -292,13 +292,10 @@ export class ProfitController {
     const updatedProfits = updateProperty(userProfits, profitId, request_edit_profit_type, text);
     let updatedCaption = request_edit_profit_caption.replace(
       new RegExp(`(${request_edit_profit_type === 'amount' ? 'Сумма' : 'Имя'}:\\s*)[^\\n]+`),
-      '$1' + text + (request_edit_profit_type === 'amount' ? '€' : '')
+      '$1' + text + (request_edit_profit_type === 'amount' ? '€' : ''),
     );
 
-    const profitInCache = profitMessages.find(profit => profit.id === profitId);
-    if (profitInCache) {
-      profitInCache[request_edit_profit_type] = text;
-    }
+    await updateObjectInList('dailyProfits', 'id', profitId, request_edit_profit_type, text);
 
     await FirebaseApi.updateUser(editedProfitUser.request_edit_profit_user_chat_id, { profits: updatedProfits });
     await editMessageWithInlineKeyboard(request_edit_profit_chat_id, request_edit_profit_message_id, updatedCaption, EDIT_PROFIT_BUTTONS);

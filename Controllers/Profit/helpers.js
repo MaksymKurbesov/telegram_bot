@@ -1,4 +1,5 @@
 import { REQUEST_PROFIT_EU_ID, REQUEST_PROFIT_UKR_ID, STATUS_EMOJI_MAP } from '../../consts.js';
+import { redisClient } from '../../index.js';
 
 export const REQUEST_PROFIT_CHATS = {
   ukr: REQUEST_PROFIT_UKR_ID,
@@ -40,6 +41,29 @@ export const generateCaptionFromUserPaypals = userPaypals => {
 
   return `<b>🅿️ Ваши PayPal:</b>\n\n${userPaypalsStr}`;
 };
+
+export async function updateObjectInList(listKey, searchKey, searchValue, updateKey, updateValue) {
+  // Получаем все элементы списка
+  const items = await redisClient.lrange(listKey, 0, -1);
+  const updatedItems = [];
+
+  // Перебираем элементы, десериализуем и проверяем, нужно ли обновить
+  for (let item of items) {
+    let obj = JSON.parse(item);
+    if (obj[searchKey] === searchValue) {
+      obj[updateKey] = updateValue; // Обновляем нужное поле
+    }
+    updatedItems.push(JSON.stringify(obj)); // Сериализуем обратно в строку
+  }
+
+  // Перезаписываем весь список
+  await redisClient.del(listKey); // Удаляем старый список
+  if (updatedItems.length > 0) {
+    await redisClient.rpush(listKey, ...updatedItems); // Записываем обновлённый список
+  }
+
+  return updatedItems; // Возвращаем обновлённый список для проверки
+}
 
 export const generateButtonsFromUserPaypals = userPaypals => {
   const buttons = userPaypals.map(paypal => [{ text: `${paypal.email}`, callback_data: `request_profit_paypal_${paypal.email}` }]);
